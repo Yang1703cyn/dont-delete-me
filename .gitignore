@@ -1,0 +1,14 @@
+# SwiftPM 的编译产物
+.build/
+.swiftpm/
+
+# scripts/build-app.sh 的打包产物
+build/
+
+# Xcode（如果有人用 Xcode 打开这个包）
+*.xcodeproj
+xcuserdata/
+DerivedData/
+
+# macOS
+.DS_Store

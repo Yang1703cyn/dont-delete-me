@@ -1,0 +1,7 @@
+/* Don't Delete Me — localized Info.plist values (English). */
+
+"CFBundleName" = "Don't Delete Me";
+"CFBundleDisplayName" = "Don't Delete Me";
+
+/* The only permission the app asks for: Automation → Finder. */
+"NSAppleEventsUsageDescription" = "Don't Delete Me needs to ask Finder where your desktop icons are, so it can draw faces on them. It never moves, modifies, or deletes any of your files.";

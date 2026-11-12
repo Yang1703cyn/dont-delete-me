@@ -1,0 +1,6 @@
+/* Don't Delete Me — UI strings (English). Keys are used by Sources/DontDeleteMe/L10n.swift. */
+
+"app.name" = "Don't Delete Me";
+"menu.pause" = "Pause";
+"menu.resume" = "Resume";
+"menu.quit" = "Quit";

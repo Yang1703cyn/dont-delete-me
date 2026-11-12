@@ -1,0 +1,6 @@
+/* 别删我 — 界面文案（简体中文）。键名由 Sources/DontDeleteMe/L10n.swift 使用。 */
+
+"app.name" = "别删我";
+"menu.pause" = "暂停";
+"menu.resume" = "继续";
+"menu.quit" = "退出";

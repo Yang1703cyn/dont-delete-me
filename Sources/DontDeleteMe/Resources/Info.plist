@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  「别删我」的 Info.plist。由 scripts/build-app.sh 原样拷进 .app（有应用图标时脚本会再加一项 CFBundleIconFile）。
+  显示名和权限说明的中英文版本在同目录的 zh-Hans.lproj / en.lproj 里的 InfoPlist.strings。
+-->
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleExecutable</key>
+	<string>DontDeleteMe</string>
+	<key>CFBundleIdentifier</key>
+	<string>io.github.dont-delete-me</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<!-- 这两个名字必须与 .app 的文件名（DontDeleteMe）一致，访达才会显示本地化后的名字：
+	     中文系统显示「别删我」，英文系统显示 Don't Delete Me。 -->
+	<key>CFBundleName</key>
+	<string>DontDeleteMe</string>
+	<key>CFBundleDisplayName</key>
+	<string>DontDeleteMe</string>
+	<key>LSHasLocalizedDisplayName</key>
+	<true/>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>0.1.0</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>14.0</string>
+	<!-- 菜单栏应用：不出现在程序坞。 -->
+	<key>LSUIElement</key>
+	<true/>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSPrincipalClass</key>
+	<string>NSApplication</string>
+	<!-- 唯一的一条权限说明：控制访达。应用自己不直接读取桌面文件夹，所以没有"访问桌面文件夹"的说明。 -->
+	<key>NSAppleEventsUsageDescription</key>
+	<string>Don't Delete Me needs to ask Finder where your desktop icons are, so it can draw faces on them. It never moves, modifies, or deletes any of your files.</string>
+</dict>
+</plist>
