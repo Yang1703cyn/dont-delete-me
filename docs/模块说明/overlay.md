@@ -44,6 +44,8 @@ overlay.start()
    锁着屏跑 `swift run DontDeleteMe --smoke-test 3`，结果是"运行阶段没有任何帧回调 / 没有收到图标上报 / 继续之后没有恢复帧回调"。
    自检需要区分"桌面不可见所以不出帧"和"坏了"（例如桌面不可见时改为检查 `isDesktopVisible == false` 且帧数为 0）。
    `Sources/DontDeleteMe/` 不归我，没有动。
+   > **总览批注（已修）**：自检现在会区分这种情况——桌面看不见时最后一行是 `smoke-test: PASS-LIMITED`，并检查"看不见时确实一帧没出"；
+   > 加 `--assume-visible` 可以在锁屏时也跑完整条流水线。见 `docs/开发说明.md` §9.3。
 3. **系统通知只在真正的应用事件循环里才送得到。** 实测：只转 `RunLoop.main.run()` 的进程收不到"屏幕睡眠 / 唤醒"通知，
    `NSApplication.run()`（或自己取事件再分发）才收得到。应用入口走的是 `NSApplication.run()`，没有问题；
    演示程序里我用"取事件再分发"的方式转主循环。以后谁写带叠加层的演示或测试程序，请照 `Demos/OverlayDemo/Support.swift` 里的 `spin` 来。
