@@ -8,9 +8,16 @@ struct LaunchOptions: Equatable {
     /// 没给秒数或秒数不合法时用 3 秒。
     var smokeTestDuration: TimeInterval?
 
+    /// 自检时强制把桌面当作看得见：`--assume-visible`。**只在自检模式下起作用**，平时带上它没有任何效果。
+    ///
+    /// 为什么需要：桌面看不见时（锁屏、熄屏、停在全屏空间、系统隐藏了桌面图标）应用按约定一帧都不出，
+    /// 自检也就验证不了"出帧、图标上报"这半边。加上它，没人在场时也能把整条流水线跑一遍。
+    var assumesDesktopVisible = false
+
     init(arguments: [String]) {
         guard let index = arguments.firstIndex(of: "--smoke-test") else { return }
         let next = arguments.indices.contains(index + 1) ? TimeInterval(arguments[index + 1]) : nil
         smokeTestDuration = next.flatMap { $0 > 0 ? $0 : nil } ?? 3
+        assumesDesktopVisible = arguments.contains("--assume-visible")
     }
 }

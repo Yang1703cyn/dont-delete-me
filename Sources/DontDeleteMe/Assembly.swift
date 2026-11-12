@@ -13,14 +13,24 @@ import Overlay
 
 @MainActor
 enum Assembly {
-    static func makePipeline() -> FramePipeline {
-        FramePipeline(
+    /// - Parameter assumeDesktopVisible: 只给自检用（`--smoke-test … --assume-visible`）：
+    ///   让叠加层不管桌面看不看得见都照常出帧。正常运行时一律为 false。
+    static func makePipeline(assumeDesktopVisible: Bool = false) -> FramePipeline {
+        let overlay: OverlayHost
+        if assumeDesktopVisible {
+            var options = OverlayOptions()
+            options.assumesAlwaysVisible = true
+            overlay = OverlayHost(options: options)
+        } else {
+            overlay = OverlayHost()
+        }
+        return FramePipeline(
             icons: DesktopIconProvider(),
             sensor: InteractionSensor(),
             // 情绪引擎的随机数种子由外部传入：每次启动换一个，让眨眼等随机节奏每次不同。
             director: EmotionDirector(seed: UInt64.random(in: UInt64.min...UInt64.max)),
             renderer: FaceRenderer(),
-            overlay: OverlayHost(),
+            overlay: overlay,
             pause: .shared
         )
     }

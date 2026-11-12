@@ -1,10 +1,16 @@
-// 自检模式（`--smoke-test [秒数]`）：给开发和验收用，普通用户用不到。
+// 自检模式（`--smoke-test [秒数] [--assume-visible]`）：给开发和验收用，普通用户用不到。
 //
 // 应用照常启动，然后自动：
 //   1. 确认菜单栏图标和两个菜单项都在，图标被系统摆在了某块屏顶部的菜单栏区域里；
 //   2. 走菜单项背后的同一个动作，把"暂停 → 继续"过一遍，确认暂停期间不出帧、继续后恢复出帧；
 //   3. 到时间后把结果逐行打印到标准输出，再走「退出」菜单项背后的同一个动作正常退出。
-// 全部通过时最后一行是 `smoke-test: PASS`，退出码 0；否则是 `smoke-test: FAIL`，退出码 1。
+//
+// 最后一行有三种：
+//   `smoke-test: PASS`          全部验证过，全部通过。退出码 0。
+//   `smoke-test: PASS-LIMITED`  验证得了的都通过了，但桌面看不见（锁屏、熄屏、停在全屏空间、系统隐藏了桌面图标），
+//                               应用按约定一帧不出，所以"出帧、图标上报"这半边没有验证。退出码 0。
+//                               想在这种时候也跑完整条流水线，加 `--assume-visible`。
+//   `smoke-test: FAIL`          有没通过的项，逐条列在前面。退出码 1。
 //
 // 它替代不了肉眼检查：图标是否真的出现在菜单栏、点开菜单的样子，仍需人工确认。
 
@@ -16,16 +22,23 @@ final class SmokeTest {
     private let duration: TimeInterval
     private let statusMenu: StatusMenuController
     private let pipeline: FramePipeline
+    private let assumesDesktopVisible: Bool
     private var failures: [String] = []
+    /// 有没有哪一段因为桌面看不见而没能验证出帧。
+    private var isLimited = false
 
-    init(duration: TimeInterval, statusMenu: StatusMenuController, pipeline: FramePipeline) {
+    init(duration: TimeInterval, statusMenu: StatusMenuController, pipeline: FramePipeline, assumesDesktopVisible: Bool = false) {
         self.duration = duration
         self.statusMenu = statusMenu
         self.pipeline = pipeline
+        self.assumesDesktopVisible = assumesDesktopVisible
     }
 
     func start() {
         report("启动：菜单项 \(statusMenu.menuItemTitles)，菜单栏图标 \(statusMenu.hasIcon ? "有" : "无")")
+        if assumesDesktopVisible {
+            report("注意：本次强制把桌面当作看得见（--assume-visible），不代表桌面此刻真的看得见")
+        }
         check(statusMenu.hasIcon, "菜单栏图标不存在")
         check(statusMenu.menuItemTitles == [L10n.pause, L10n.quit], "启动时菜单项应为 [暂停, 退出]")
 
@@ -38,9 +51,11 @@ final class SmokeTest {
         checkIconPlacement()
 
         let framesBeforePause = pipeline.stats.frames
-        report("运行阶段：帧回调 \(framesBeforePause) 次，图标上报 \(pipeline.stats.iconUpdates) 次")
-        check(framesBeforePause > 0, "运行阶段没有任何帧回调")
-        check(pipeline.stats.iconUpdates > 0, "运行阶段没有收到图标上报")
+        report("运行阶段：桌面\(visibilityText)，帧回调 \(framesBeforePause) 次，图标上报 \(pipeline.stats.iconUpdates) 次")
+        if shouldHaveFrames(inPhase: "运行阶段", frames: framesBeforePause) {
+            check(framesBeforePause > 0, "运行阶段没有任何帧回调")
+            check(pipeline.stats.iconUpdates > 0, "运行阶段没有收到图标上报")
+        }
 
         statusMenu.togglePause(nil)
         check(PauseSwitch.shared.isPaused, "点「暂停」后全局开关应为暂停")
@@ -65,13 +80,22 @@ final class SmokeTest {
 
     private func finish(framesAtResume: Int) {
         let framesAfterResume = pipeline.stats.frames - framesAtResume
-        report("继续阶段：菜单项 \(statusMenu.menuItemTitles)，帧回调 \(framesAfterResume) 次")
-        check(framesAfterResume > 0, "继续之后没有恢复帧回调")
+        report("继续阶段：桌面\(visibilityText)，菜单项 \(statusMenu.menuItemTitles)，帧回调 \(framesAfterResume) 次")
+        if shouldHaveFrames(inPhase: "继续阶段", frames: framesAfterResume) {
+            check(framesAfterResume > 0, "继续之后没有恢复帧回调")
+        }
+
+        let hiddenFrames = pipeline.stats.framesWhileDesktopHidden
+        check(hiddenFrames == 0, "桌面看不见时不应有帧回调（出了 \(hiddenFrames) 次）")
 
         for failure in failures {
             report("未通过：\(failure)")
         }
-        report(failures.isEmpty ? "PASS" : "FAIL")
+        if failures.isEmpty, isLimited {
+            report("受限：菜单、暂停与继续、「看不见时不出帧」已验证；出帧和图标上报没有验证。"
+                + "请在桌面看得见时重跑，或加 --assume-visible 强制当作看得见")
+        }
+        report(failures.isEmpty ? (isLimited ? "PASS-LIMITED" : "PASS") : "FAIL")
         fflush(stdout)
 
         if failures.isEmpty {
@@ -80,6 +104,22 @@ final class SmokeTest {
         } else {
             exit(1)
         }
+    }
+
+    private var visibilityText: String {
+        pipeline.isDesktopVisible ? "看得见" : "看不见"
+    }
+
+    /// 一个"应用在干活"的阶段结束时，该不该要求它出过帧。
+    ///
+    /// - 桌面此刻看得见：该。
+    /// - 看不见，但这一段出过帧：说明中途才变得看不见，出过的帧照常算数：该。
+    /// - 看不见，而且一帧没出：这正是约定的行为（看不见就不出帧）。不算失败，但记下"这半边没验证"。
+    private func shouldHaveFrames(inPhase phase: String, frames: Int) -> Bool {
+        if pipeline.isDesktopVisible || frames > 0 { return true }
+        isLimited = true
+        report("\(phase)：桌面看不见（锁屏、熄屏、停在全屏空间，或系统隐藏了桌面图标），按约定一帧不出")
+        return false
     }
 
     /// 菜单栏图标是否被系统摆到了某块屏顶部的菜单栏里。

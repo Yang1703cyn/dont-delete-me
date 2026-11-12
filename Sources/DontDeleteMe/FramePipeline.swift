@@ -21,6 +21,8 @@ final class FramePipeline: OverlayFrameSource {
         var draws = 0
         /// 收到图标提供者上报的次数。
         var iconUpdates = 0
+        /// 桌面看不见时收到的帧回调次数。约定是"看不见就不出帧"，所以正常应当一直是 0。
+        var framesWhileDesktopHidden = 0
     }
 
     /// 鼠标静止超过这么久（秒）且没有悬停、拖拽，就让图标提供者放慢读取。
@@ -102,6 +104,9 @@ final class FramePipeline: OverlayFrameSource {
         currentPace = nil
     }
 
+    /// 叠加层此刻是否认为桌面看得见。供自检观察。
+    var isDesktopVisible: Bool { overlay.isDesktopVisible }
+
     /// 应用是否"在干活"：没被暂停，而且桌面看得见。
     private var isActive: Bool {
         !pause.isPaused && overlay.isDesktopVisible
@@ -140,6 +145,9 @@ final class FramePipeline: OverlayFrameSource {
 
     func overlayFrame(at time: FrameTime) -> OverlayFrame {
         stats.frames += 1
+        if !overlay.isDesktopVisible {
+            stats.framesWhileDesktopHidden += 1
+        }
 
         // 1. 图标：取出两帧之间累积的上报；没有就是"没变化"。
         let iconUpdate = pendingUpdate ?? .unchanged(icons.snapshot)

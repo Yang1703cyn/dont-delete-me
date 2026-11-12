@@ -16,13 +16,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let statusMenu = StatusMenuController(pause: .shared)
-        let pipeline = Assembly.makePipeline()
+        let pipeline = Assembly.makePipeline(assumeDesktopVisible: options.assumesDesktopVisible)
         pipeline.start()
         self.statusMenu = statusMenu
         self.pipeline = pipeline
 
         if let duration = options.smokeTestDuration {
-            let smokeTest = SmokeTest(duration: duration, statusMenu: statusMenu, pipeline: pipeline)
+            let smokeTest = SmokeTest(
+                duration: duration, statusMenu: statusMenu, pipeline: pipeline,
+                assumesDesktopVisible: options.assumesDesktopVisible
+            )
             smokeTest.start()
             self.smokeTest = smokeTest
         }

@@ -369,6 +369,23 @@ struct FramePipelineTests {
         #expect(bench.sensor.resetCount == 1)
     }
 
+    @Test func 桌面看不见时收到的帧回调会被单独记数() {
+        let bench = Bench()
+        bench.pipeline.start()
+        #expect(bench.pipeline.isDesktopVisible)
+
+        _ = bench.frame(at: 1)
+        #expect(bench.pipeline.stats.frames == 1)
+        #expect(bench.pipeline.stats.framesWhileDesktopHidden == 0)
+
+        // 约定是看不见就不出帧；万一叠加层还是回调了，这里记下来，自检据此报错。
+        bench.overlay.setVisible(false)
+        #expect(!bench.pipeline.isDesktopVisible)
+        _ = bench.frame(at: 2)
+        #expect(bench.pipeline.stats.frames == 2)
+        #expect(bench.pipeline.stats.framesWhileDesktopHidden == 1)
+    }
+
     @Test func 暂停状态下启动则一开始就不读图标() {
         let bench = Bench()
         bench.pause.setPaused(true)
@@ -420,5 +437,13 @@ struct LaunchOptionsTests {
         #expect(LaunchOptions(arguments: ["DontDeleteMe", "--smoke-test", "1.5"]).smokeTestDuration == 1.5)
         #expect(LaunchOptions(arguments: ["DontDeleteMe", "--smoke-test", "-2"]).smokeTestDuration == 3)
         #expect(LaunchOptions(arguments: ["DontDeleteMe", "--smoke-test", "abc"]).smokeTestDuration == 3)
+    }
+
+    @Test func 强制当作桌面看得见只在自检模式下起作用() {
+        #expect(!LaunchOptions(arguments: ["DontDeleteMe", "--smoke-test"]).assumesDesktopVisible)
+        #expect(LaunchOptions(arguments: ["DontDeleteMe", "--smoke-test", "4", "--assume-visible"]).assumesDesktopVisible)
+        #expect(LaunchOptions(arguments: ["DontDeleteMe", "--assume-visible", "--smoke-test"]).assumesDesktopVisible)
+        // 没有 --smoke-test：这个参数不起作用，应用按正常方式运行。
+        #expect(!LaunchOptions(arguments: ["DontDeleteMe", "--assume-visible"]).assumesDesktopVisible)
     }
 }
