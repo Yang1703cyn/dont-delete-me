@@ -1,32 +1,50 @@
-// 占位，由 input-sense 子对话替换。
+// InputSense · 模块入口：交互感知
 //
-// 模块入口：应用以 `InteractionSensor()` 构造它——请保留这个类型名和无参构造方式
-// （可以增加带默认值的参数），内部实现和文件组织随意。
-// 要实现的协议与约定见 docs/接口约定.md 第 3 节。
-//
-// 占位行为：不读取任何系统状态；永远报告"鼠标在原点不动、没有悬停、没有拖拽、不知道废纸篓在哪"，
-// 并请应用每秒再来问一次（让数据流以最低的开销空转）。
+// 应用以 `InteractionSensor()` 构造它，每帧调用一次 `update`。它把两部分接在一起：
+//   - 读系统的薄薄一层（`InteractionEnvironment`，默认是真实的 `LiveEnvironment`）；
+//   - 纯逻辑的判断器（`InteractionJudge`）。
+// 自己没有定时器、没有后台任务：没人调用 `update`（应用被暂停、桌面看不见）时什么都不读，开销为零。
+// 接口约定见 docs/接口约定.md 第 3 节；结论、数据和限制见 docs/模块说明/input-sense.md。
 
+import CoreGraphics
 import DDMCore
 import Foundation
 
 @MainActor
 public final class InteractionSensor: InteractionSensing {
-    private var firstFrameAt: TimeInterval?
+    /// 读系统的那一层。
+    public let environment: any InteractionEnvironment
+    private var judge = InteractionJudge()
 
-    public init() {}
+    /// - Parameter environment: 读系统的那一层。应用里用默认的真实实现；演示和测试可以换成编出来的。
+    public init(environment: any InteractionEnvironment = LiveEnvironment()) {
+        self.environment = environment
+    }
 
     public func update(time: FrameTime, icons: IconUpdate) -> InteractionFacts {
-        let firstFrameAt = self.firstFrameAt ?? time.monotonic
-        self.firstFrameAt = firstFrameAt
-        return InteractionFacts(
+        let input = JudgeInput(
             time: time,
-            mouse: MouseState(idleDuration: time.monotonic - firstFrameAt),
-            demand: .by(time.monotonic + 1)
+            pointer: environment.readPointer(),
+            icons: icons,
+            trash: environment.trashEstimate(at: time, isDragging: judge.isDragging)
         )
+        let output = judge.step(input) { [environment] point in environment.surface(at: point) }
+        for releasePoint in output.trashLessons {
+            environment.learnTrashLocation(releasePoint: releasePoint, at: time)
+        }
+        return output.facts
     }
 
     public func reset() {
-        firstFrameAt = nil
+        // 只丢掉进行到一半的判断；学到的废纸篓位置在读系统的那一层里，不受影响。
+        judge.reset()
     }
+
+    // MARK: 排查
+
+    /// 最近一次查到的"鼠标处最上面是什么窗口"；还没查过为 nil。
+    public var lastSurface: PointerSurface? { judge.lastSurface }
+
+    /// 一共问了多少次"鼠标处最上面是什么窗口"（判断器会限频，不是每帧都问）。
+    public var surfaceSampleCount: Int { judge.surfaceSampleCount }
 }
