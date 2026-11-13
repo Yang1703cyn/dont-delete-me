@@ -386,6 +386,34 @@ struct FramePipelineTests {
         #expect(bench.pipeline.stats.framesWhileDesktopHidden == 1)
     }
 
+    @Test func 鼠标在远处挪动时眼珠几乎不动_不重画_挪得多了才重画() {
+        let bench = Bench()
+        let a = makeIcon(1)
+        bench.icons.snapshot = makeSnapshot([a], revision: 1)
+        bench.pipeline.start()
+
+        // 鼠标在右边 800 点处。
+        bench.director.stateFor = { FaceState(seed: $0.id.faceSeed, gazeTarget: CGVector(dx: 800, dy: 0), gazeFollow: 1) }
+        let first = bench.frame(at: 1).items[0].contentVersion
+
+        // 往下挪了 3 点：眼珠的落点变化不到千分之四，沿用同一张图。
+        bench.director.stateFor = { FaceState(seed: $0.id.faceSeed, gazeTarget: CGVector(dx: 800, dy: 3), gazeFollow: 1) }
+        #expect(bench.frame(at: 1.02).items[0].contentVersion == first)
+        #expect(bench.pipeline.stats.redrawsSaved == 1)
+
+        // 一点一点接着挪：比的是屏幕上那张图，偏差攒够了就重画，不会一直拖着不更新。
+        var version = first
+        var dy = 3.0
+        while version == first, dy < 200 {
+            dy += 3
+            let target = CGVector(dx: 800, dy: dy)
+            bench.director.stateFor = { FaceState(seed: $0.id.faceSeed, gazeTarget: target, gazeFollow: 1) }
+            version = bench.frame(at: 1.02 + dy / 1000).items[0].contentVersion
+        }
+        #expect(version != first)
+        #expect(dy < 40)   // 800 点外，挪二十来点就该重画了
+    }
+
     @Test func 暂停状态下启动则一开始就不读图标() {
         let bench = Bench()
         bench.pause.setPaused(true)
@@ -423,6 +451,86 @@ struct FramePipelineTests {
         bench.pause.setPaused(false)
         #expect(bench.icons.paces == pacesAfterStop)
         #expect(bench.sensor.resetCount == 0)
+    }
+}
+
+@Suite("眼珠几乎没动就不重画")
+struct FaceRedrawTests {
+    private let size = CGSize(width: 64, height: 64)
+
+    private func state(_ dx: CGFloat, _ dy: CGFloat, follow: Double = 1, blush: Double = 0) -> FaceState {
+        FaceState(seed: 7, gazeTarget: CGVector(dx: dx, dy: dy), gazeFollow: follow, blush: blush)
+    }
+
+    @Test func 完全相同当然算一样() {
+        #expect(FaceRedraw.looksSame(state(100, 50), state(100, 50), iconSize: size))
+    }
+
+    @Test func 远处的目标挪一点算一样_挪很多不算() {
+        #expect(FaceRedraw.looksSame(state(1000, 0), state(1000, 5), iconSize: size))
+        #expect(FaceRedraw.looksSame(state(1000, 0), state(1030, 0), iconSize: size))   // 沿视线方向挪：方向没变
+        #expect(!FaceRedraw.looksSame(state(1000, 0), state(1000, 60), iconSize: size))
+        #expect(!FaceRedraw.looksSame(state(1000, 0), state(-1000, 0), iconSize: size))
+    }
+
+    @Test func 近处的目标挪一点点就不算一样() {
+        // 鼠标就在脸上：一两点的移动眼珠都看得出来（还会对眼）。
+        #expect(!FaceRedraw.looksSame(state(10, 0), state(12, 0), iconSize: size))
+        #expect(!FaceRedraw.looksSame(state(0, 0), state(1, 1), iconSize: size))
+        #expect(!FaceRedraw.looksSame(state(-11, -5), state(-10, -5), iconSize: size))
+    }
+
+    @Test func 视线以外的任何参数变了都不算一样() {
+        #expect(!FaceRedraw.looksSame(state(1000, 0), state(1000, 0, blush: 0.01), iconSize: size))
+        var blinking = state(1000, 0)
+        blinking.blink = 0.2
+        #expect(!FaceRedraw.looksSame(state(1000, 0), blinking, iconSize: size))
+        var other = state(1000, 0)
+        other.seed = 8
+        #expect(!FaceRedraw.looksSame(state(1000, 0), other, iconSize: size))
+    }
+
+    @Test func 跟随程度变了要看眼珠实际动了多少() {
+        #expect(FaceRedraw.looksSame(state(1000, 0, follow: 1), state(1000, 0, follow: 0.995), iconSize: size))
+        #expect(!FaceRedraw.looksSame(state(1000, 0, follow: 1), state(1000, 0, follow: 0.9), iconSize: size))
+        // 不跟随时目标在哪都一样（眼珠都在正中）。
+        #expect(FaceRedraw.looksSame(state(1000, 0, follow: 0), state(-500, 300, follow: 0), iconSize: size))
+    }
+
+    @Test func 不是数的输入一律重画() {
+        #expect(!FaceRedraw.looksSame(state(1000, 0), state(.nan, 0), iconSize: size))
+        #expect(!FaceRedraw.looksSame(state(1000, 0), state(1000, 1), iconSize: .zero))
+    }
+
+    @Test func 容差对应的眼珠移动确实小到看不出() {
+        // 在各种距离和方向上扫一遍：凡是被判为"一样"的，三个出发点上的落点变化都小于容差。
+        // 落点的整段行程在 64 点图标上约 2.7 点，所以容差 0.02 对应不到 0.06 点。
+        #expect(FaceRedraw.gazeTolerance * 2.7 < 0.06)
+    }
+}
+
+@Suite("只运行一个")
+struct SingleInstanceTests {
+    private func instance(_ pid: pid_t, _ seconds: TimeInterval?) -> SingleInstance.Instance {
+        SingleInstance.Instance(pid: pid, launchDate: seconds.map { Date(timeIntervalSince1970: $0) })
+    }
+
+    @Test func 没有别的实例就不让位() {
+        #expect(!SingleInstance.shouldYield(own: instance(100, 50), others: []))
+    }
+
+    @Test func 先启动的留下_后启动的让位() {
+        #expect(SingleInstance.shouldYield(own: instance(100, 50), others: [instance(200, 10)]))
+        #expect(!SingleInstance.shouldYield(own: instance(200, 10), others: [instance(100, 50)]))
+    }
+
+    @Test func 分不出先后时进程号小的留下_两边结论一致() {
+        let a = instance(100, 50), b = instance(200, 50)
+        #expect(!SingleInstance.shouldYield(own: a, others: [b]))
+        #expect(SingleInstance.shouldYield(own: b, others: [a]))
+        let c = instance(300, nil), d = instance(400, 5)
+        #expect(!SingleInstance.shouldYield(own: c, others: [d]))
+        #expect(SingleInstance.shouldYield(own: d, others: [c]))
     }
 }
 

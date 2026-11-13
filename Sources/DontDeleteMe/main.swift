@@ -6,6 +6,17 @@
 import AppKit
 
 let options = LaunchOptions(arguments: CommandLine.arguments)
+
+// 已经有一个在运行：后启动的这个自己退出（见 SingleInstance.swift）。
+if SingleInstance.anotherInstanceShouldStay() {
+    if options.smokeTestDuration != nil {
+        print("smoke-test: 已经有一个「别删我」在运行，这一个不启动。请先退出它再自检")
+        print("smoke-test: FAIL")
+        exit(1)
+    }
+    exit(0)
+}
+
 let delegate = AppDelegate(options: options)
 
 let application = NSApplication.shared

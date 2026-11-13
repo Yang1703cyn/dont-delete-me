@@ -23,6 +23,8 @@ final class FramePipeline: OverlayFrameSource {
         var iconUpdates = 0
         /// 桌面看不见时收到的帧回调次数。约定是"看不见就不出帧"，所以正常应当一直是 0。
         var framesWhileDesktopHidden = 0
+        /// 因为"眼珠几乎没动"而省下的重画次数（见 FaceRedraw.swift）。
+        var redrawsSaved = 0
     }
 
     /// 鼠标静止超过这么久（秒）且没有悬停、拖拽，就让图标提供者放慢读取。
@@ -177,9 +179,14 @@ final class FramePipeline: OverlayFrameSource {
 
             let state = placement.state.isValid ? placement.state : placement.state.clamped()
             let face: ShownFace
-            if let shown = shownFaces[key], shown.state == state,
+            if let shown = shownFaces[key],
+               FaceRedraw.looksSame(shown.state, state, iconSize: placement.rect.size),
                !(shown.redrawAt.map { time.monotonic >= $0 } ?? false) {
-                // 表情没变，循环动画（如果有）也还没到刷新的时刻：沿用。
+                // 表情没变（或者只是视线目标挪了一点、眼珠几乎没动），循环动画（如果有）也还没到刷新的时刻：沿用。
+                // 沿用的是屏幕上那张图对应的表情，所以下一帧仍然拿它来比——眼珠的偏差不会一点点攒起来。
+                if shown.state != state {
+                    stats.redrawsSaved += 1
+                }
                 face = shown
             } else {
                 lastVersion += 1

@@ -26,6 +26,9 @@ final class SmokeTest {
     private var failures: [String] = []
     /// 有没有哪一段因为桌面看不见而没能验证出帧。
     private var isLimited = false
+    /// 当前这一段开始时的时刻和本进程已用的处理器时间，用来算这一段的处理器占用。
+    private var phaseStartedAt: TimeInterval = 0
+    private var phaseStartCPU: Double = 0
 
     init(duration: TimeInterval, statusMenu: StatusMenuController, pipeline: FramePipeline, assumesDesktopVisible: Bool = false) {
         self.duration = duration
@@ -43,6 +46,7 @@ final class SmokeTest {
         check(statusMenu.menuItemTitles == [L10n.pause, L10n.quit], "启动时菜单项应为 [暂停, 退出]")
 
         // 把总时长分成三段：运行 → 暂停 → 继续。
+        beginPhase()
         after(duration / 3) { self.pauseViaMenu() }
     }
 
@@ -51,7 +55,7 @@ final class SmokeTest {
         checkIconPlacement()
 
         let framesBeforePause = pipeline.stats.frames
-        report("运行阶段：桌面\(visibilityText)，帧回调 \(framesBeforePause) 次，图标上报 \(pipeline.stats.iconUpdates) 次")
+        report("运行阶段：桌面\(visibilityText)，帧回调 \(framesBeforePause) 次，图标上报 \(pipeline.stats.iconUpdates) 次，\(phaseUsageText())")
         if shouldHaveFrames(inPhase: "运行阶段", frames: framesBeforePause) {
             check(framesBeforePause > 0, "运行阶段没有任何帧回调")
             check(pipeline.stats.iconUpdates > 0, "运行阶段没有收到图标上报")
@@ -62,12 +66,13 @@ final class SmokeTest {
         check(statusMenu.menuItemTitles == [L10n.resume, L10n.quit], "暂停后菜单项应为 [继续, 退出]")
 
         let framesAtPause = pipeline.stats.frames
+        beginPhase()
         after(duration / 3) { self.resumeViaMenu(framesAtPause: framesAtPause) }
     }
 
     private func resumeViaMenu(framesAtPause: Int) {
         let framesWhilePaused = pipeline.stats.frames - framesAtPause
-        report("暂停阶段：菜单项 \(statusMenu.menuItemTitles)，帧回调 \(framesWhilePaused) 次")
+        report("暂停阶段：菜单项 \(statusMenu.menuItemTitles)，帧回调 \(framesWhilePaused) 次，\(phaseUsageText())")
         check(framesWhilePaused == 0, "暂停期间不应有帧回调")
 
         statusMenu.togglePause(nil)
@@ -75,18 +80,21 @@ final class SmokeTest {
         check(statusMenu.menuItemTitles == [L10n.pause, L10n.quit], "继续后菜单项应为 [暂停, 退出]")
 
         let framesAtResume = pipeline.stats.frames
+        beginPhase()
         after(duration / 3) { self.finish(framesAtResume: framesAtResume) }
     }
 
     private func finish(framesAtResume: Int) {
         let framesAfterResume = pipeline.stats.frames - framesAtResume
-        report("继续阶段：桌面\(visibilityText)，菜单项 \(statusMenu.menuItemTitles)，帧回调 \(framesAfterResume) 次")
+        report("继续阶段：桌面\(visibilityText)，菜单项 \(statusMenu.menuItemTitles)，帧回调 \(framesAfterResume) 次，\(phaseUsageText())")
         if shouldHaveFrames(inPhase: "继续阶段", frames: framesAfterResume) {
             check(framesAfterResume > 0, "继续之后没有恢复帧回调")
         }
 
         let hiddenFrames = pipeline.stats.framesWhileDesktopHidden
         check(hiddenFrames == 0, "桌面看不见时不应有帧回调（出了 \(hiddenFrames) 次）")
+        report("全程：帧回调 \(pipeline.stats.frames) 次，画脸 \(pipeline.stats.draws) 次，"
+            + "因眼珠几乎没动而省下的重画 \(pipeline.stats.redrawsSaved) 次，图标上报 \(pipeline.stats.iconUpdates) 次")
 
         for failure in failures {
             report("未通过：\(failure)")
@@ -104,6 +112,29 @@ final class SmokeTest {
         } else {
             exit(1)
         }
+    }
+
+    // MARK: 处理器占用
+
+    private func beginPhase() {
+        phaseStartedAt = ProcessInfo.processInfo.systemUptime
+        phaseStartCPU = Self.processorSeconds()
+    }
+
+    /// 这一段里本进程的处理器占用（100% = 占满一个核心）。只是给开发看的参考数字，不参与通过与否的判断。
+    private func phaseUsageText() -> String {
+        let elapsed = ProcessInfo.processInfo.systemUptime - phaseStartedAt
+        guard elapsed > 0 else { return "处理器占用 不详" }
+        let used = Self.processorSeconds() - phaseStartCPU
+        return String(format: "处理器占用 %.1f%%", used / elapsed * 100)
+    }
+
+    /// 本进程到现在一共用了多少秒处理器时间（用户态 + 内核态）。
+    private static func processorSeconds() -> Double {
+        var usage = rusage()
+        guard getrusage(RUSAGE_SELF, &usage) == 0 else { return 0 }
+        func seconds(_ time: timeval) -> Double { Double(time.tv_sec) + Double(time.tv_usec) / 1_000_000 }
+        return seconds(usage.ru_utime) + seconds(usage.ru_stime)
     }
 
     private var visibilityText: String {
