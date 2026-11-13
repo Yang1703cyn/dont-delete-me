@@ -1,3 +1,5 @@
+<img src="Assets/AppIcon.iconset/icon_128x128@2x.png" width="128" height="128" align="right" alt="The Don't Delete Me app icon: a document in tears">
+
 # Don't Delete Me
 
 **English** · [简体中文](README.zh-CN.md)
@@ -5,8 +7,8 @@
 > Every icon on your Mac desktop gets a face. They watch your cursor — and burst into tears when you drag them toward the Trash.
 
 <!-- 待核实：演示动图尚未录制（分镜见 docs/发布/动图分镜.md）。录好后把下面这行占位文字换成：
-     <p align="center"><img src="Assets/demo.gif" width="720" alt="Desktop icons with faces follow the cursor; one is dragged to the Trash and cries, the others cover their eyes, and a little ghost floats up."></p>
-     动图的存放路径也待定。 -->
+     <p align="center"><img src="Assets/demo.en.gif" width="720" alt="Desktop icons with faces follow the cursor; one is dragged to the Trash and cries, the others cover their eyes, and a little ghost floats up."></p>
+     这一份用英文假文件录的那条；动图的存放路径也待定。 -->
 *Demo GIF goes here — it hasn't been recorded yet. **[TO VERIFY · 待核实]***
 
 Don't Delete Me only *draws on top of* your desktop. It never changes, moves, renames, or deletes any of your files or icons. Open it and it works: no account, no settings, no network.
@@ -29,21 +31,21 @@ This is version 0.1.0, for macOS. A Windows version is planned but does not exis
 
 Every icon looks a little different and has its own temperament (timid, curious, or bold). The same icon gets the same face every time.
 
-The whole interface is one menu bar icon with two items: **Pause / Resume** and **Quit**. There is no Dock icon and no settings window. Two displays are supported (tested with a built-in display plus one external monitor), and opening the app a second time never gives you a second set of faces.
+The whole interface is one menu bar icon — a pair of eyes — with two items: **Pause / Resume** and **Quit**. There is no Dock icon and no settings window. Two displays are supported (tested with a built-in display plus one external monitor), and opening the app a second time never gives you a second set of faces.
 
 ## Download and first launch
 
-**Requirements:** the app declares macOS 14 as its minimum, but so far it has only been run on macOS 27.0.1 on an Apple Silicon Mac. Other versions are untested.
+**Requirements:** an Apple Silicon Mac — the prebuilt app does not run on Intel Macs. The app declares macOS 14 as its minimum, but so far it has only been run on macOS 27.0.1. Other versions are untested.
 
-1. Download the app from the [Releases page](../../releases/latest). **[TO VERIFY · 待核实]** — nothing has been published yet; the link, the file name, and whether the download also runs on Intel Macs will be filled in with the first release.
+1. Download the app from the [Releases page](../../releases/latest). **[TO VERIFY · 待核实]** — nothing has been published yet; the link and the file name will be filled in with the first release.
 2. Unzip it and put `DontDeleteMe.app` wherever you like. The Applications folder is a fine choice.
-3. Open it. The first time, macOS will probably refuse — see below.
-4. macOS asks whether Don't Delete Me may control Finder. Allow it. ([Why it asks](#permissions-and-privacy).)
-5. Faces appear on your desktop icons, and a small icon appears in the menu bar.
+3. Open it. The first time, macOS will refuse — see below.
+4. macOS asks whether Don't Delete Me may control Finder. Click **Allow**. ([Why it asks](#permissions-and-privacy).)
+5. Faces appear on your desktop icons, and a pair of eyes appears in the menu bar.
 
 ### "macOS won't let me open it"
 
-Don't Delete Me is not notarized by Apple: notarization requires a paid Apple developer account, and this project doesn't have one. So macOS will most likely block a downloaded copy the first time you open it.
+Don't Delete Me is not notarized by Apple: notarization requires a paid Apple developer account, and this project doesn't have one. macOS's built-in check rejects apps like that, so a downloaded copy is blocked the first time you open it.
 
 > **[TO VERIFY · 待核实]** The steps below are what we expect on recent macOS versions. They have not yet been tested with a copy downloaded from the internet, so the exact wording may differ. Screenshots will be added once they are confirmed.
 >
@@ -130,14 +132,14 @@ The usual reasons:
 Yes, a little. See [Known limitations](#known-limitations).
 
 **How do I stop it or remove it?**
-Choose **Quit** from the menu bar icon and the faces go away. To uninstall, quit and move the app to the Trash. (Yes, we see the irony.) **[TO VERIFY · 待核实]** To also clear its small preferences and its Finder permission record, run `defaults delete io.github.dont-delete-me` and `tccutil reset AppleEvents io.github.dont-delete-me` — the identifier in these commands is provisional and may change before the first release.
+Choose **Quit** from the menu bar icon and the faces go away. To uninstall, quit and move the app to the Trash. (Yes, we see the irony.) To also clear its small preferences and its Finder permission record, run `defaults delete io.github.yang1703cyn.dont-delete-me` and `tccutil reset AppleEvents io.github.yang1703cyn.dont-delete-me`.
 
 **Is there a Windows version?**
 Not yet. It is planned, but not implemented.
 
 ## Known limitations
 
-- Tested only on macOS 27.0.1 on Apple Silicon.
+- Tested only on macOS 27.0.1 on Apple Silicon. The prebuilt app is built for Apple Silicon only.
 - Not notarized, so the first launch takes a few extra clicks (see above).
 - No faces while Stacks is on, while desktop items are hidden, or in a full-screen app's space.
 - The face always sits just above the middle of the icon. If the icon has something important there — an image thumbnail, say — the eyes cover it.
@@ -156,7 +158,7 @@ Not yet. It is planned, but not implemented.
 You need macOS and a Swift 6 toolchain. Apple's Command Line Tools are enough — the full Xcode is not required — and there are no third-party dependencies.
 
 ```bash
-git clone https://github.com/OWNER/dont-delete-me.git   # [TO VERIFY · 待核实] the repository address isn't final
+git clone https://github.com/Yang1703cyn/dont-delete-me.git
 cd dont-delete-me
 
 swift build                 # compile everything
