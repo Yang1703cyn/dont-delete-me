@@ -11,7 +11,7 @@
 	<key>CFBundleExecutable</key>
 	<string>DontDeleteMe</string>
 	<key>CFBundleIdentifier</key>
-	<string>io.github.dont-delete-me</string>
+	<string>io.github.yang1703cyn.dont-delete-me</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<!-- 这两个名字必须与 .app 的文件名（DontDeleteMe）一致，访达才会显示本地化后的名字：
