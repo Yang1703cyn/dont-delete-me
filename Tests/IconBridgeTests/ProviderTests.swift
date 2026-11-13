@@ -46,13 +46,16 @@ struct ProviderTests {
         ])
     }
 
-    private func makeProvider(_ desktop: FakeDesktop, policy: PollingPolicy, pause: PauseSwitch = PauseSwitch()) -> (DesktopIconProvider, Collector) {
+    private func makeProvider(
+        _ desktop: FakeDesktop, policy: PollingPolicy, pause: PauseSwitch = PauseSwitch(), tuning: BridgeCore.Tuning = BridgeCore.Tuning()
+    ) -> (DesktopIconProvider, Collector) {
         let core = BridgeCore(
             source: desktop,
             identity: IconIdentity(salt: Fixture.salt),
             layoutProvider: { Fixture.layout },
             sleep: { _ in },
-            measureText: { text, _ in CGFloat(text.count) * 7 }
+            measureText: { text, _ in CGFloat(text.count) * 7 },
+            tuning: tuning
         )
         let provider = DesktopIconProvider(pause: pause, core: core, policy: policy)
         let collector = Collector()
@@ -423,6 +426,87 @@ struct ProviderTests {
         #expect(collector.updates[1].isReset)
         #expect(collector.updates[1].snapshot.status == .ok)
         #expect(collector.updates[1].snapshot.icons.count == 2)
+    }
+
+    // MARK: 访达没空回答（用户正拖着图标）
+
+    @Test func 请求被访达卡到松手才回答_松手时的立即刷新不让上报晚到_也不多读一遍() async {
+        let desktop = desktop()
+        var tuning = BridgeCore.Tuning()
+        tuning.stallThreshold = 0.02           // 测试里"卡住"只有几十毫秒
+        let (provider, collector) = makeProvider(desktop, policy: fastPolling, tuning: tuning)
+        provider.start()
+        #expect(await wait { collector.updates.count == 1 })
+
+        let gate = desktop.hold("count")       // 用户拖起了图标：下一次快速检查发出去就没了回音
+        #expect(await wait { gate.isReached })
+        await settle(0.08)                     // 拖着……
+        desktop.move("甲", to: CGPoint(x: 900, y: 600))
+        let releasedAt = ProcessInfo.processInfo.systemUptime
+        provider.refreshNow()                  // 松手的那一帧，应用要求立即刷新（此时那个请求还卡着）
+        gate.open()                            // 访达在松手的那一刻回答
+        #expect(await wait { collector.updates.count == 2 })
+        await settle(0.15)
+        provider.stop()
+
+        #expect(collector.updates.count == 2)  // 整体重载 + 这一次；没有再补一个"没有变化"的回调
+        let update = collector.updates[1]
+        #expect(!update.isReset)
+        if case let .moved(_, to) = update.changes.first {
+            #expect(to.imageRect.center == CGPoint(x: 900, y: 600))
+        } else {
+            Issue.record("应当是移动事件")
+        }
+        #expect(update.snapshot.capturedAt >= releasedAt)             // 这份快照确实是松手之后读的
+        #expect(collector.cycles.filter(\.wasForced).isEmpty)          // 没有为那次 refreshNow 再读一遍
+        #expect(collector.cycles.contains { $0.stalledSeconds > 0 })
+    }
+
+    @Test func 立即刷新撞上访达没空_快照原样保留_不上报_访达回答后才回调() async {
+        let desktop = desktop()
+        let (provider, collector) = makeProvider(desktop, policy: noPolling)
+        provider.start()
+        #expect(await wait { collector.updates.count == 1 })
+        let before = provider.snapshot
+
+        desktop.error = .timeout               // 访达不回答了（假桌面里每个请求立刻"超时"）
+        provider.refreshNow()
+        #expect(await wait { collector.cycles.contains { $0.finderWasBusy } })
+        await settle(0.1)
+        #expect(collector.updates.count == 1)  // 没有上报重载，也没有空的回调
+        #expect(provider.snapshot == before)   // 状态仍是"正常"，图标都在
+        #expect(provider.status == .ok)
+
+        desktop.move("甲", to: CGPoint(x: 900, y: 600))
+        desktop.error = nil                    // 松手，访达回答了
+        #expect(await wait { collector.updates.count == 2 })
+        provider.stop()
+        #expect(!collector.updates[1].isReset)
+        if case let .moved(_, to) = collector.updates[1].changes.first {
+            #expect(to.imageRect.center == CGPoint(x: 900, y: 600))
+        } else {
+            Issue.record("应当是移动事件")
+        }
+    }
+
+    @Test func 定时轮询撞上访达没空_不上报_之后自己接着等_访达回答后照常发现变化() async {
+        let desktop = desktop()
+        let (provider, collector) = makeProvider(desktop, policy: fastPolling)
+        provider.start()
+        #expect(await wait { collector.updates.count == 1 })
+
+        desktop.error = .timeout
+        #expect(await wait { collector.cycles.filter(\.finderWasBusy).count >= 3 })   // 没人调用 refreshNow，它自己在反复等
+        #expect(collector.updates.count == 1)
+        #expect(provider.status == .ok)
+        #expect(provider.snapshot.icons.count == 2)
+
+        desktop.add("丙", at: CGPoint(x: 700, y: 300))
+        desktop.error = nil
+        #expect(await wait { collector.updates.count == 2 })
+        provider.stop()
+        #expect(collector.updates[1].changes.count == 1)
+        #expect(!collector.updates[1].isReset)
     }
 
     @Test func 在回调里调用停止是安全的() async {

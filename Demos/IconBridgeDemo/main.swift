@@ -4,6 +4,7 @@
 //   swift run IconBridgeDemo --watch 300      只读：同上，持续 300 秒（一边看一边在桌面上新建、拖动、删除文件）
 //   swift run IconBridgeDemo --selftest       用自己的临时文件实测：新增 / 移动 / 消失 / 进废纸篓 / 磁盘
 //   swift run IconBridgeDemo --drag-check     需要真人：新建一个临时图标，等你用鼠标拖它，报告访达多久更新位置，然后清理
+//   swift run IconBridgeDemo --slow-drag-check 需要真人：按住图标很久才松手 / 才扔进废纸篓，看图标桥在访达不回应期间扛不扛得住
 //   swift run IconBridgeDemo --displays       把一个临时图标依次放到每块显示器上，核对坐标和"所在显示器"
 //   swift run IconBridgeDemo --bench          量读取耗时，以及不同轮询频率下本进程和访达的 CPU 占用（约 3 分钟）
 //   swift run IconBridgeDemo --calibrate      截图校准锚点和标签矩形（需要屏幕亮着、已解锁、有录屏权限）
@@ -31,6 +32,7 @@ if arguments.contains("--help") || arguments.contains("-h") {
       --watch [秒]      只读，持续打印（默认 60 秒）
       --selftest        用自己的临时文件实测新增 / 移动 / 消失 / 进废纸篓 / 磁盘
       --drag-check      真人拖动检查（加 --rehearse 则不等人，自己经访达改位置来演练流程）
+      --slow-drag-check 真人检查：按住图标至少 25 秒再松手、再扔进废纸篓（加 --rehearse 则不等人）
       --displays        多显示器坐标核对
       --bench           读取耗时与 CPU 占用
       --calibrate       截图校准锚点（需要屏幕亮着、已解锁、有录屏权限；加 --force 跳过这项预检，只为检查流程）
@@ -39,6 +41,8 @@ if arguments.contains("--help") || arguments.contains("-h") {
     exitCode = 0
 } else if arguments.contains("--selftest") {
     exitCode = SelfTest().run()
+} else if arguments.contains("--slow-drag-check") {
+    exitCode = SlowDragCheck(rehearse: arguments.contains("--rehearse")).run()
 } else if arguments.contains("--drag-check") {
     exitCode = DragCheck(rehearse: arguments.contains("--rehearse")).run()
 } else if arguments.contains("--displays") {

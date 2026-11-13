@@ -114,6 +114,9 @@ enum TrashVerdictLogic {
 
 enum StatusMapping {
     /// 读取失败时该报告什么状态。
+    ///
+    /// 注意"等访达回复超时（-1712）"不走这里：超时多半只是访达一时没空（例如用户正拖着图标），
+    /// `BridgeCore` 会保留快照继续等，连续很久都不回答才报"访达不可用"。
     static func status(for error: FinderError) -> IconProviderStatus {
         switch error {
         case .notPermitted:
@@ -123,8 +126,8 @@ enum StatusMapping {
             // 还没问过用户（授权窗口还没回答）：仍算"启动中"。
             return .starting
         default:
-            // 访达没运行（-600）、连接断了（-609）、超时（-1712）、对象不存在（-1728，常见于访达刚重启）……
-            // 以及一切归不了类的失败。
+            // 访达没运行（-600）、连接断了（-609）、对象不存在（-1728，常见于访达刚重启）……
+            // 以及一切归不了类的失败。（超时 -1712 落到这里时，说明已经连续很久没有回答了。）
             return .finderUnavailable
         }
     }

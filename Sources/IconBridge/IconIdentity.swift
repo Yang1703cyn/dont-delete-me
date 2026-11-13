@@ -64,6 +64,25 @@ struct IconIdentity: Sendable {
     }
 }
 
+/// 存取盐的地方：只需要"按键取一段数据""按键存一段数据"两件事。
+/// 应用里是本应用自己的偏好设置；单元测试用内存里的字典顶替，不往磁盘上写任何东西。
+protocol SaltStore {
+    func data(forKey key: String) -> Data?
+    func set(_ value: Data, forKey key: String)
+}
+
+/// 本应用自己的偏好设置。
+struct PreferencesSaltStore: SaltStore {
+    let defaults: UserDefaults
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+    }
+
+    func data(forKey key: String) -> Data? { defaults.data(forKey: key) }
+    func set(_ value: Data, forKey key: String) { defaults.set(value, forKey: key) }
+}
+
 /// 盐存在哪里。
 public enum IconIdentityStorage: Sendable {
     /// 存在本应用的偏好设置里：编号跨启动不变（同一个图标每次长相一样）。应用里用这个。
@@ -74,16 +93,16 @@ public enum IconIdentityStorage: Sendable {
     static let defaultsKey = "IconBridge.identitySalt"
 
     /// 取出（或首次生成并保存）盐。在主线程调用。
-    func loadSalt(defaults: UserDefaults = .standard) -> Data {
+    func loadSalt(store: any SaltStore = PreferencesSaltStore()) -> Data {
         switch self {
         case .ephemeral:
             return IconIdentity.randomSalt()
         case .persistent:
-            if let existing = defaults.data(forKey: Self.defaultsKey), existing.count >= 16 {
+            if let existing = store.data(forKey: Self.defaultsKey), existing.count >= 16 {
                 return existing
             }
             let salt = IconIdentity.randomSalt()
-            defaults.set(salt, forKey: Self.defaultsKey)
+            store.set(salt, forKey: Self.defaultsKey)
             return salt
         }
     }

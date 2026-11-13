@@ -41,6 +41,9 @@ struct PollingPolicy: Equatable, Sendable {
     var followUpDelays: [TimeInterval] = [0.4, 1.0]
     /// 一次读取因为桌面正在变化而作废后，隔多久重读（秒）。
     var inconsistentRetryDelay: TimeInterval = 0.2
+    /// 访达没空回答（等到超时也没有回复）之后，隔多久再去等它（秒）。
+    /// 很短：等待本身就是"发一个最便宜的请求、阻塞到它回答"，几乎一直有一个请求在排队，访达一有空我们就知道。
+    var busyRetryDelay: TimeInterval = 0.2
     /// 间隔按耗时拉长时，最多拉到下限的几倍。访达偶尔慢一次（例如正忙着拷贝），不该让轮询停上几分钟。
     var maxStretch: Double = 4
     /// `refreshNow()` 引发的读取，两次开始之间至少隔多久（秒）。
@@ -71,6 +74,8 @@ struct PollSchedule: Equatable, Sendable {
     private var status = IconProviderStatus.starting
     /// 上一个周期有没有向访达发请求。
     private var lastCycleAskedFinder = false
+    /// 上一个周期没等到访达的回答：到这个时刻再去等。
+    private var busyRetryAt: TimeInterval?
 
     init(policy: PollingPolicy = PollingPolicy()) {
         self.policy = policy
@@ -84,17 +89,26 @@ struct PollSchedule: Equatable, Sendable {
     /// 记下一个刚结束的周期。
     mutating func record(_ outcome: CycleOutcome) {
         let end = outcome.startedAt + outcome.duration
-        lastCycleStart = outcome.startedAt
         status = outcome.snapshot.status
+        if outcome.finderWasBusy {
+            // 访达没空：什么都没读到，别的历史不动，稍后再去等。
+            busyRetryAt = end + policy.busyRetryDelay
+            return
+        }
+        busyRetryAt = nil
+        // 被访达卡住的那段时间不算数：真正干活是从它回答之后开始的；这样的周期也不拿来估计"平时要花多久"。
+        let start = min(end, outcome.startedAt + outcome.stalledSeconds)
+        let wasStalled = outcome.stalledSeconds > 0
+        lastCycleStart = start
         lastCycleAskedFinder = outcome.requestCount > 0
         if outcome.performedFullRead {
-            lastFullStart = outcome.startedAt
-            if outcome.wasRoutineRead {
+            lastFullStart = start
+            if outcome.wasRoutineRead, !wasStalled {
                 Self.remember(outcome.duration, in: &fullDurations)
             }
             // 这次完整读取已经顶替了到期的追加读取。
             followUps.removeAll { $0 <= end }
-        } else {
+        } else if !wasStalled {
             Self.remember(outcome.duration, in: &quickDurations)
         }
         if outcome.foundChanges {
@@ -109,6 +123,9 @@ struct PollSchedule: Equatable, Sendable {
     /// 下一个周期：哪一种、最早什么时刻开始（可能已经过了，那就是立刻）。停止读取时为 nil。
     func next(pace: IconPollingPace) -> (kind: CycleKind, at: TimeInterval)? {
         guard let pace = policy.pace(pace) else { return nil }
+        if let busyRetryAt {
+            return (.full, busyRetryAt)   // 访达没空：很快再去等它（核心会先只发一个最便宜的请求）
+        }
         guard let lastCycleStart, let lastFullStart else {
             return (.full, 0)   // 还没读过：立刻完整读取
         }

@@ -12,17 +12,21 @@ import DDMCore
 import Foundation
 
 /// 估算标签矩形用的常数。单位都是点，或"文字大小的倍数"。
+///
+/// "标签在下方"的几项已经用截图校准过（图标 64 点、文字 12 点，见 docs/模块说明/icon-bridge.md §3.3）：
+/// 文字的实际笔画落在推算的矩形之内，四边各留 2.5～6.5 点。"标签在右侧"和别的字号仍是推算，没有校准。
 struct LabelMetrics: Equatable, Sendable {
     /// 标签在下方时：图标图像下沿到标签上沿的间隙。
-    var gapBelowImage: CGFloat = 4
+    /// （实测第一行字的笔画从图像下沿往下 9.5 点开始、高 11 点；一行 16 点高，所以这一行的上沿在 7 点处。）
+    var gapBelowImage: CGFloat = 7
     /// 标签在右侧时：图标图像右沿到标签左沿的间隙。
     var gapBesideImage: CGFloat = 6
-    /// 一行文字的高度 = 文字大小 × 这个倍数（12 点的字约 16 点高）。
+    /// 一行文字的高度 = 文字大小 × 这个倍数（12 点的字 16 点高——实测两行字的行距正是 16 点）。
     var lineHeightFactor: CGFloat = 4.0 / 3.0
     /// 标签文字左右各多出的留白（选中时的圆角底色比文字略宽）。
     var horizontalPadding: CGFloat = 4
     /// 标签在下方时，一行文字最宽 = 图标大小 + 这个值；超过就折成两行。
-    /// （访达实际按"网格间距"决定，默认间距 54 时约为图标大小 + 46；网格间距读不到，所以按默认值估。）
+    /// （访达实际按"网格间距"决定；网格间距读不到，所以按默认间距 54 估。实测默认间距下折行后的字宽 106.5 点，在 110 点之内。）
     var maxTextWidthBeyondIcon: CGFloat = 46
     /// 标签在右侧时，一行文字最宽 = 图标大小 × 这个倍数。
     var maxTextWidthFactorBeside: CGFloat = 2.5

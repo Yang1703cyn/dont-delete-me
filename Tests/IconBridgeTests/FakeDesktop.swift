@@ -30,6 +30,8 @@ final class FakeDesktop: DesktopQuerying, @unchecked Sendable {
     private var occurrences: [String: Int] = [:]
     private var storedDelay: TimeInterval = 0
     private var storedMainThreadCalls = 0
+    private var storedEveryCall: (@Sendable (String) -> Void)?
+    private var storedErrorsByCall: [String: FinderError] = [:]
 
     init(_ items: [Item] = []) {
         storedItems = items
@@ -113,6 +115,29 @@ final class FakeDesktop: DesktopQuerying, @unchecked Sendable {
         set { lock.withLock { storedDelay = newValue } }
     }
 
+    /// 每个查询开始时都执行的动作（参数是查询的名字）。用来模拟"每个请求都要等很久"：在里面把假时钟往后拨。
+    var everyCall: (@Sendable (String) -> Void)? {
+        get { lock.withLock { storedEveryCall } }
+        set { lock.withLock { storedEveryCall = newValue } }
+    }
+
+    /// 只让某一个查询出错（传 nil 恢复正常），别的查询照常回答。例如只有废纸篓问不动。
+    func fail(_ call: String, with error: FinderError?) {
+        lock.withLock { storedErrorsByCall[call] = error }
+    }
+
+    /// 模拟"访达没空回答"（例如用户正拖着图标）：从现在起每个请求都等满 `timeout` 秒，然后超时。
+    func stopAnswering(clock: Fixture.Clock, timeout: TimeInterval = 15) {
+        error = .timeout
+        everyCall = { _ in clock.advance(timeout) }
+    }
+
+    /// 访达又开始回答了。
+    func resumeAnswering() {
+        error = nil
+        everyCall = nil
+    }
+
     /// 有多少次查询是在主线程上发生的（应当永远是 0）。
     var mainThreadCalls: Int { lock.withLock { storedMainThreadCalls } }
 
@@ -167,7 +192,8 @@ final class FakeDesktop: DesktopQuerying, @unchecked Sendable {
 
     private func enter(_ call: String) throws(FinderError) {
         for action in arrive(call) { action(self) }
-        let (error, delay) = lock.withLock { (storedError, storedDelay) }
+        everyCall?(call)
+        let (error, delay) = lock.withLock { (storedErrorsByCall[call] ?? storedError, storedDelay) }
         if delay > 0 { Thread.sleep(forTimeInterval: delay) }
         if let error { throw error }
     }

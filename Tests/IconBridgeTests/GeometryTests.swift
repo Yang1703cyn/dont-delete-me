@@ -27,11 +27,26 @@ struct IconGeometryTests {
         #expect(IconGeometry.position(ofImageRect: rect) == position)
     }
 
+    @Test func 推算的标签矩形包住截图里量到的文字笔画() {
+        // 截图校准的实测值（图标 64 点、文字 12 点、标签在下；图像矩形下沿在 y = 252）：
+        //   短名字（一行，字宽 72.3 点）：笔画占 (123.0, 261.5, 71.5 × 11.0)
+        //   长名字（折成两行）：        笔画占 (346.0, 261.5, 106.5 × 27.0)
+        let short = IconGeometry.labelRect(textWidth: 72.3, imageRect: CGRect(x: 128, y: 188, width: 64, height: 64), options: options())
+        let shortInk = CGRect(x: 123.0, y: 261.5, width: 71.5, height: 11.0)
+        #expect(short.contains(shortInk))
+        #expect(short.insetBy(dx: 7, dy: 3).intersection(shortInk) != shortInk)   // 没有大出去太多：每边最多多出 7 点 / 3 点
+
+        let long = IconGeometry.labelRect(textWidth: 400, imageRect: CGRect(x: 368, y: 188, width: 64, height: 64), options: options())
+        let longInk = CGRect(x: 346.0, y: 261.5, width: 106.5, height: 27.0)
+        #expect(long.contains(longInk))
+        #expect(long == CGRect(x: 341, y: 259, width: 118, height: 32))
+    }
+
     @Test func 标签在下方_短名字一行_水平居中() {
         let image = CGRect(x: 268, y: 268, width: 64, height: 64)
         let label = IconGeometry.labelRect(textWidth: 50, imageRect: image, options: options())
-        // 宽 = 文字 50 + 左右留白各 4；高 = 一行 16；上沿 = 图像下沿 332 + 间隙 4。
-        #expect(label == CGRect(x: 300 - 29, y: 336, width: 58, height: 16))
+        // 宽 = 文字 50 + 左右留白各 4；高 = 一行 16；上沿 = 图像下沿 332 + 间隙 7。
+        #expect(label == CGRect(x: 300 - 29, y: 339, width: 58, height: 16))
         #expect(label.midX == image.midX)
     }
 
@@ -41,7 +56,7 @@ struct IconGeometryTests {
         // 最宽 = 图标 64 + 46 = 110，加留白 118；最多两行。
         #expect(label.width == 118)
         #expect(label.height == 32)
-        #expect(label.minY == 336)
+        #expect(label.minY == 339)
         #expect(label.midX == image.midX)
     }
 
@@ -64,9 +79,9 @@ struct IconGeometryTests {
         let large = IconGeometry.imageRect(position: CGPoint(x: 500, y: 500), iconSize: 128)
         let smallLabel = IconGeometry.labelRect(textWidth: 30, imageRect: small, options: options(icon: 32))
         let largeLabel = IconGeometry.labelRect(textWidth: 30, imageRect: large, options: options(icon: 128))
-        // 标签上沿 = 中心 + 半个图标 + 间隙 4。
-        #expect(smallLabel.minY == CGFloat(520))
-        #expect(largeLabel.minY == CGFloat(568))
+        // 标签上沿 = 中心 + 半个图标 + 间隙 7。
+        #expect(smallLabel.minY == CGFloat(523))
+        #expect(largeLabel.minY == CGFloat(571))
     }
 
     @Test func 标签在右侧_垂直居中_紧挨图像右沿() {
@@ -271,14 +286,35 @@ struct IdentityTests {
         #expect(a != b)
     }
 
-    @Test func 持久的盐存进偏好设置后不再变() throws {
-        let suite = "IconBridgeTests.\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
-        let first = IconIdentityStorage.persistent.loadSalt(defaults: defaults)
-        let second = IconIdentityStorage.persistent.loadSalt(defaults: defaults)
+    /// 内存里的字典，顶替偏好设置：测试不往磁盘上写任何东西。
+    private final class MemorySaltStore: SaltStore {
+        var values: [String: Data] = [:]
+        func data(forKey key: String) -> Data? { values[key] }
+        func set(_ value: Data, forKey key: String) { values[key] = value }
+    }
+
+    @Test func 持久的盐第一次生成后存起来_以后不再变() {
+        let store = MemorySaltStore()
+        let first = IconIdentityStorage.persistent.loadSalt(store: store)
+        let second = IconIdentityStorage.persistent.loadSalt(store: store)
         #expect(first == second)
         #expect(first.count == 32)
-        #expect(IconIdentityStorage.ephemeral.loadSalt(defaults: defaults) != first)
+        #expect(store.values == [IconIdentityStorage.defaultsKey: first])   // 只存了这一项
+    }
+
+    @Test func 存着的盐太短或没有时重新生成() {
+        let store = MemorySaltStore()
+        store.values[IconIdentityStorage.defaultsKey] = Data([1, 2, 3])     // 坏掉的旧值
+        let salt = IconIdentityStorage.persistent.loadSalt(store: store)
+        #expect(salt.count == 32)
+        #expect(store.values[IconIdentityStorage.defaultsKey] == salt)
+    }
+
+    @Test func 不落盘的盐每次都是新的_而且不碰存储() {
+        let store = MemorySaltStore()
+        let first = IconIdentityStorage.ephemeral.loadSalt(store: store)
+        let second = IconIdentityStorage.ephemeral.loadSalt(store: store)
+        #expect(first != second)
+        #expect(store.values.isEmpty)
     }
 }

@@ -27,6 +27,10 @@ public struct IconBridgeCycleReport: Sendable, Equatable {
     public var requestCount: Int
     /// 是否发现了图标的增减或移动。
     public var foundChanges: Bool
+    /// 这个周期里，请求被访达卡住（等了很久才有回答，或等到超时也没有回答）的时间（秒）。平时为 0。
+    public var stalledSeconds: TimeInterval
+    /// 访达这一轮没空回答（典型情形：用户正拖着图标）。快照原样保留，图标桥会继续等。
+    public var finderWasBusy: Bool
 }
 
 @MainActor
@@ -52,6 +56,8 @@ public final class DesktopIconProvider: IconProviding {
     private var isReading = false
     /// 读取进行期间又收到了 refreshNow()：这次读完之后要再读一次。
     private var refreshPending = false
+    /// 最近一次"读取进行期间收到 refreshNow()"的时刻。
+    private var refreshRequestedAt: TimeInterval = 0
     /// 已经排好了一次由 refreshNow() 引发、稍后开始的读取。
     private var forcedReadIsScheduled = false
     private var lastForcedStart: TimeInterval = -.infinity
@@ -144,6 +150,7 @@ public final class DesktopIconProvider: IconProviding {
         guard isRunning, !isSuspended else { return }
         if isReading {
             refreshPending = true
+            refreshRequestedAt = clock()
         } else if !forcedReadIsScheduled {
             startForcedRead()
         }
@@ -213,7 +220,9 @@ public final class DesktopIconProvider: IconProviding {
             startedAt: outcome.startedAt,
             duration: outcome.duration,
             requestCount: outcome.requestCount,
-            foundChanges: outcome.foundChanges
+            foundChanges: outcome.foundChanges,
+            stalledSeconds: outcome.stalledSeconds,
+            finderWasBusy: outcome.finderWasBusy
         ))
         guard isRunning, generation == self.generation else { return }
         if isSuspended {
@@ -224,14 +233,22 @@ public final class DesktopIconProvider: IconProviding {
 
         snapshot = outcome.snapshot
         schedule.record(outcome)
-        if let update = outcome.update {
+        var update = outcome.update
+        if refreshPending, outcome.performedFullRead, !outcome.finderWasBusy, !outcome.wasInconsistent,
+           outcome.snapshot.capturedAt >= refreshRequestedAt {
+            // 这个周期的完整读取是在 refreshNow() 之后才开始的（典型情形：之前的请求被访达卡到松手才回答，
+            // 回答之后才开始完整读取）。它已经"不早于那次调用"，不必再读一遍：就用它兑现"读完一定回调"。
+            refreshPending = false
+            update = update ?? IconUpdate(snapshot: outcome.snapshot)
+        }
+        if let update {
             onUpdate?(update)
         }
         // 回调里可能调用了 stop() / refreshNow() / setPollingPace()，重新看一眼现状。
         guard isRunning, generation == self.generation, !isSuspended, !isReading else { return }
 
-        if request.forced, outcome.wasInconsistent {
-            // refreshNow() 的那次读取作废了（桌面正在变）：承诺的"读完回调一次"顺延到重读的那一次。
+        if request.forced, outcome.wasInconsistent || outcome.finderWasBusy {
+            // refreshNow() 的那次读取没读成（桌面正在变，或访达没空回答）：承诺的"读完回调一次"顺延到重读的那一次。
             refreshPending = true
         }
         if resumePending {

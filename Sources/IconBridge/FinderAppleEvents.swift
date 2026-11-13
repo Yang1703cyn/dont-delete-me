@@ -123,8 +123,12 @@ enum FinderAuthorization: Equatable, Sendable {
 struct FinderConnection: Sendable {
     static let bundleIdentifier = "com.apple.finder"
 
-    /// 等待访达回复的最长时间（秒）。正常一次请求只要十几毫秒；访达忙（例如正在删除、拷贝）时会排队。
-    var timeout: TimeInterval = 5
+    /// 单个请求最多等访达多久（秒）。正常一次请求只要十几毫秒。
+    ///
+    /// 访达在用户拖着图标期间**完全不回应**请求，一直卡到松手那一刻才回答（实测）。所以这里不能设得太短，
+    /// 等不到也不代表访达坏了——超时之后怎么办见 `BridgeCore`（保留快照，换一个最便宜的请求继续等）。
+    /// 设成 15 秒：绝大多数拖动在这之内结束，请求会在松手时自然得到回答；真的超时了，后台队列也不会被一个请求占住太久。
+    var timeout: TimeInterval = 15
 
     // MARK: 对象说明符
 

@@ -103,8 +103,9 @@ final class Calibrate {
         var allGood = true
         for (title, spot) in [("短名字", spots[0]), ("长名字", spots[1])] {
             guard let icon = session.provider.snapshot.icons.first(where: { $0.imageRect.center == spot }) else { continue }
-            // 只取这个图标周围的一小块：左右各 170 点，上 30 点，下 110 点。
-            let region = icon.imageRect.insetBy(dx: -170, dy: 0).offsetBy(dx: 0, dy: 40).insetBy(dx: 0, dy: -70).intersection(display.frame)
+            // 只取这个图标周围的一小块：左右各 80 点（标签最宽约比图标每边多出 27 点），上 30 点，下 110 点。
+            // 不能取得更宽：两个临时图标相距 240 点，太宽会把旁边那个图标的标签也量进来。
+            let region = icon.imageRect.insetBy(dx: -80, dy: 0).offsetBy(dx: 0, dy: 40).insetBy(dx: 0, dy: -70).intersection(display.frame)
             guard let bitmap = Self.bitmap(from: image, region: region, display: display) else {
                 say("\(title)：取不出这一块像素。")
                 allGood = false

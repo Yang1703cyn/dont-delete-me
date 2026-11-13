@@ -43,7 +43,7 @@ struct BridgeCoreTests {
         let file = try #require(update.snapshot.icon(withID: Fixture.id("甲")))
         #expect(file.kind == .file)
         #expect(file.imageRect == CGRect(x: 268, y: 268, width: 64, height: 64))
-        #expect(file.labelRect == CGRect(x: 300 - 7.5, y: 336, width: 15, height: 16))   // 1 个字 × 7 点 + 留白 8
+        #expect(file.labelRect == CGRect(x: 300 - 7.5, y: 339, width: 15, height: 16))   // 1 个字 × 7 点 + 留白 8
         #expect(file.displayID == Fixture.mainDisplay.id)
         #expect(file.modifiedAt == Date(timeIntervalSince1970: 1_700_000_000))
 
@@ -444,7 +444,7 @@ struct BridgeCoreTests {
         #expect(update.changes == [.removed(DesktopIcon(
             id: Fixture.id("移动硬盘", isVolume: true), kind: .volume,
             imageRect: CGRect(x: 1368, y: 68, width: 64, height: 64),
-            labelRect: CGRect(x: 1400 - 18, y: 136, width: 36, height: 16),
+            labelRect: CGRect(x: 1400 - 18, y: 139, width: 36, height: 16),
             displayID: Fixture.mainDisplay.id
         ), trashed: .no)])
         #expect(!desktop.log.contains("trashContains"))
@@ -672,14 +672,6 @@ struct BridgeCoreTests {
         #expect(up.snapshot.revision == 3)
     }
 
-    @Test func 访达超时无响应也算不可用() throws {
-        let desktop = twoFiles()
-        var core = Fixture.core(desktop)
-        _ = core.run(full)
-        desktop.error = .timeout
-        #expect(try #require(core.run(full).update).snapshot.status == .finderUnavailable)
-    }
-
     @Test func 快速检查时访达出错_交给完整读取定性() throws {
         let desktop = twoFiles()
         var core = Fixture.core(desktop)
@@ -748,8 +740,8 @@ struct BridgeCoreTests {
             func classCodes() throws(FinderError) -> [FourCharCode] { try base.classCodes() }
             func modificationDates() throws(FinderError) -> [Date?] { try base.modificationDates() }
             func viewOptions() throws(FinderError) -> DesktopViewOptions { try base.viewOptions() }
-            func trashItemCount() throws(FinderError) -> Int { throw .timeout }
-            func trashContains(name: String) throws(FinderError) -> Bool { throw .timeout }
+            func trashItemCount() throws(FinderError) -> Int { throw .noSuchObject }
+            func trashContains(name: String) throws(FinderError) -> Bool { throw .noSuchObject }
             func stacksEnabled() -> Bool? { nil }
         }
         let desktop = twoFiles()
