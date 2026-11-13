@@ -165,7 +165,7 @@ struct PoseTests {
         #expect(pose(Sample.dozing(0.3)).sleepDepth == 0)
         #expect(pose(Sample.dozing(0.9)).sleepDepth > 0.9)
         // 睡熟时，某些时刻 Zzz 飘到了图标上方。
-        let highest = stride(from: 0.0, to: 2.6, by: 0.2)
+        let highest = stride(from: 0.0, to: 4.0, by: 0.25)
             .compactMap { render(Sample.dozing(1), time: $0).paintedBounds?.minY }
             .min()!
         #expect(highest < rect.minY - 4, "Zzz 应该飘到图标上面去")

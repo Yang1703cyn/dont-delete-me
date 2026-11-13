@@ -194,7 +194,7 @@ final class FramePipeline: OverlayFrameSource {
                 face = ShownFace(
                     state: state,
                     version: lastVersion,
-                    redrawAt: interval.map { time.monotonic + max($0, 0) }
+                    redrawAt: interval.map { Self.nextRedraw(after: time.monotonic, every: $0) }
                 )
             }
             // 循环动画的下一次刷新也是一种"何时需要下一帧"：间隔为 0 就是连续出帧。
@@ -214,6 +214,17 @@ final class FramePipeline: OverlayFrameSource {
         shownFaces = faces
 
         return OverlayFrame(items: items, demand: demand)
+    }
+
+    /// 循环小动画下一次该重画的时刻：对齐到间隔的整数倍（严格晚于现在）。
+    ///
+    /// 不对齐的话，几张同类的脸（比如几个睡着的图标）各自从入睡那一刻起算，叠加层每秒要为它们分别醒好几次；
+    /// 对齐之后它们落在同一批时刻上，一次唤醒一起重画。画面只取决于时间（表情绘制是无状态的），所以对齐不改变画面。
+    /// 间隔为 0（每帧都要重画）或不是正数时，就是现在。
+    static func nextRedraw(after now: TimeInterval, every interval: TimeInterval) -> TimeInterval {
+        guard interval > 0, interval.isFinite, now.isFinite else { return now }
+        // 加一点余量：浮点误差让"正好在整数倍上"的时刻算成略小于它时，不要只约到几乎同一时刻。
+        return (floor(now / interval + 1e-6) + 1) * interval
     }
 
     func drawOverlayItem(_ item: OverlayItem, in context: CGContext, at time: FrameTime) {

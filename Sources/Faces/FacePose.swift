@@ -141,6 +141,10 @@ struct FacePose {
     let sleepDepth: CGFloat
     /// 呼吸：-1…1，随时间缓慢起伏；没睡着时为 0。
     let breath: CGFloat
+    /// Zzz 里这一刻看得见的那几个 Z（由下往上）；没睡着时为空。
+    let zzz: [ZLetter]
+    /// Zzz 的不透明度：入睡的那一两秒里淡入，睡熟后为 1。
+    let zzzAlpha: CGFloat
     /// 担忧（眉毛）。
     let worry: CGFloat
     /// 手抬到位的程度（已做缓动）。
@@ -182,7 +186,10 @@ struct FacePose {
         handRise = 1 - remaining * remaining * remaining
 
         let phase = look.phase * 2 * .pi
-        breath = sleepDepth > 0 ? CGFloat(sin(time * 2 * .pi * 0.28 + phase)) * sleepDepth : 0
+        // 起伏：周期 breathPeriod，每个图标的相位不同（与 Zzz 的循环用同一个相位，两者同步）。
+        breath = sleepDepth > 0
+            ? CGFloat(sin((time / FaceStyle.breathPeriod + look.phase) * 2 * .pi)) * sleepDepth
+            : 0
 
         // 整张脸的位移：发抖（快）、头晕摇晃（慢）、睡着时的起伏（很慢）。
         var shake = CGVector.zero
@@ -193,6 +200,12 @@ struct FacePose {
             )
         }
         self.shake = shake
+        // Zzz 在入睡的那一两秒里随睡深一起长大、淡入；刚开始那一点点又小又淡，认不出来、像个脏点，干脆不画。
+        let zzzAlpha = FaceMath.smoothstep(0.3, 0.8, sleepDepth)
+        self.zzzAlpha = zzzAlpha
+        zzz = zzzAlpha > 0.01
+            ? FacePose.zzzLetters(rect: rect, u: u, s: s, fine: fine, look: look, depth: sleepDepth, time: time)
+            : []
         let sway = p.dizziness > 0 ? CGFloat(sin(time * 2 * .pi * 0.9 + phase)) * 1.6 * u * p.dizziness : 0
 
         // 眼睛的大小：害怕时瞪大。
@@ -209,7 +222,7 @@ struct FacePose {
         let lean = FacePose.gaze(from: rest, to: target, reach: reach, follow: p.gazeFollow)
         let eyeLine = CGPoint(
             x: rest.x + shake.dx + sway + lean.dx * FaceStyle.leanX * s,
-            y: rest.y + shake.dy + breath * 0.7 * u + lean.dy * FaceStyle.leanY * s
+            y: rest.y + shake.dy + breath * FaceStyle.breathLift * u + lean.dy * FaceStyle.leanY * s
         )
         self.eyeLine = eyeLine
 
@@ -272,6 +285,48 @@ struct FacePose {
         rightEye = makeEye(side: 1)
     }
 
+    /// Zzz 里的一个 Z：中心和半宽（点）。
+    struct ZLetter: Equatable {
+        /// 第几个：0 最下面的小 z，2 最上面的大 Z。
+        var index: Int
+        var center: CGPoint
+        var half: CGFloat
+    }
+
+    /// Zzz：三个由小到大的"Z"，在头的右上方由下往上排成一串。
+    /// 按每秒 4 帧设计（见 FaceStyle.sleepFrameInterval）：每 0.75 秒冒出一个——先下面的小 z，再中间的，再上面的大 Z——
+    /// 每个停留 3 秒，期间慢慢往右上飘一点（64 点图标上每帧不到半个点），然后按冒出来的顺序依次消失。
+    /// 冒出来时从八成大长到原大，消失前缩回八成；只变大小、不变透明度，所以睡熟时所有的 Z 能一次画完。
+    /// 小图标上最小的那个太小、认不出来，把它放大到和中间那个一样大（不能省掉：省掉的话一轮里有一小会儿一个 Z 都没有）。
+    static func zzzLetters(
+        rect: CGRect, u: CGFloat, s: CGFloat, fine: Bool, look: FaceLook, depth: CGFloat, time: TimeInterval
+    ) -> [ZLetter] {
+        let loop = FaceStyle.breathPeriod
+        let life = FaceStyle.zzzLife
+        // 与起伏用同一个相位：Zzz 和起伏同步。
+        let clock = FaceMath.fract(time / loop + look.phase) * loop
+        var letters: [ZLetter] = []
+        let smallest = FaceStyle.zzzLetters[1].half
+        for (index, letter) in FaceStyle.zzzLetters.enumerated() {
+            // 这个 Z 冒出来多久了（秒）；超过停留时间就不画。
+            let age = FaceMath.fract((clock - letter.spawn) / loop) * loop
+            guard age < life else { continue }
+            let seconds = CGFloat(age)
+            let grow: CGFloat = 0.8 + 0.2 * FaceMath.smoothstep(0, 0.3, seconds)
+            let shrink: CGFloat = 1 - 0.2 * FaceMath.smoothstep(CGFloat(life) - 0.3, CGFloat(life), seconds)
+            let drift = CGFloat(age / life)
+            letters.append(ZLetter(
+                index: index,
+                center: CGPoint(
+                    x: rect.midX + (letter.x + FaceStyle.zzzDriftX * drift) * u,
+                    y: rect.minY + (letter.y - FaceStyle.zzzDriftY * drift) * u
+                ),
+                half: (fine ? letter.half : max(letter.half, smallest)) * s * depth * grow * shrink
+            ))
+        }
+        return letters
+    }
+
     /// 眼睛睁开的那一段矮于这个高度（单位：五官单位 s）就算闭上了，画成一条线。
     static let closedThreshold: CGFloat = 0.9
 
@@ -302,6 +357,8 @@ struct MouthShape {
     var wavePhase: CGFloat
     /// 张开的高度（点）；小到一定程度就只画一条线。
     var open: CGFloat
+    /// 是不是"纯粹睡着"的小圆嘴（没有掺别的嘴形）：这时画成椭圆，比一般的嘴便宜得多。
+    var isSnoreOnly: Bool
 
     /// 张开到这个高度以上（单位：五官单位 s）才画成一个口。
     static let openThreshold: CGFloat = 0.9
@@ -333,6 +390,7 @@ struct MouthShape {
         // 哭的时候嘴一张一合；睡着时随呼吸微微开合。
         let sob = p.tears > FaceStyle.tearStreamThreshold ? 1 + 0.08 * CGFloat(sin(pose.time * 2 * .pi * 5)) : 1
         open = (6.8 * wail * sob + 2.4 * snore * (1 + 0.2 * pose.breath)) * s
+        isSnoreOnly = snore >= 1 && wail == 0 && upset == 0
     }
 
     /// 上唇上的第 i 个点（共 steps + 1 个）。

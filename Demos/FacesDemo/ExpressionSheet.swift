@@ -270,9 +270,10 @@ enum ExpressionSheet {
 
     /// 画一个图标和它的脸。
     /// - Parameter iconAlpha: 图标的不透明度（幽灵那一行图标已经被删了，只画一个淡影标出原位）。
+    /// - Parameter time: 循环小动画停在哪一刻；默认是样张统一用的 `stillTime`。
     static func drawFace(
         _ state: FaceState, on icon: SampleIcon, in rect: CGRect, iconAlpha: CGFloat, renderer: FaceRenderer,
-        context: CGContext, pixelsPerPoint: CGFloat
+        context: CGContext, pixelsPerPoint: CGFloat, time: TimeInterval = stillTime
     ) {
         context.saveGState()
         context.setAlpha(iconAlpha)
@@ -281,7 +282,7 @@ enum ExpressionSheet {
         // 和叠加层一样：把绘制裁在"图标矩形 + 声明的外扩"里。超出的部分在真实桌面上会被裁掉，样张上也一样。
         context.saveGState()
         context.clip(to: rect.expanded(by: renderer.outsets(for: state, iconSize: rect.size)))
-        renderer.draw(state, in: rect, context: context, time: stillTime)
+        renderer.draw(state, in: rect, context: context, time: time)
         context.restoreGState()
     }
 

@@ -58,7 +58,7 @@ public struct FaceRenderer: FaceRendering {
     /// 循环小动画多久要重画一次。
     ///   - 幽灵、发抖、头晕、泪流：每个显示刷新都重画（0）；
     ///   - 只有汗：每秒 30 次；只是泪汪汪（泪还没流下来）：每秒 20 次；
-    ///   - 睡着（Zzz、缓慢起伏）：每秒 10 次；
+    ///   - 睡着（Zzz、缓慢起伏）：每秒 4 次（`FaceStyle.sleepFrameInterval`；动作按这个帧率设计）；
     ///   - 其余（平静、害羞、不发抖的害怕、捂眼、犯困但还没睡着）：画面不随时间变化，返回 nil。
     public func animationInterval(for state: FaceState) -> TimeInterval? {
         if state.mood == .ghost { return 0 }
@@ -71,7 +71,7 @@ public struct FaceRenderer: FaceRendering {
         }
         if state.sweat > 0 { atLeast(every: 1.0 / 30) }
         if state.tears > 0.05 { atLeast(every: 1.0 / 20) }
-        if state.sleepiness > Double(FaceStyle.zzzThreshold) { atLeast(every: 0.1) }
+        if state.sleepiness > Double(FaceStyle.zzzThreshold) { atLeast(every: FaceStyle.sleepFrameInterval) }
         return interval
     }
 }

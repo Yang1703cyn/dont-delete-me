@@ -50,7 +50,11 @@ enum FaceBench {
     ]
 
     /// 量一种情形：返回平均每次绘制的毫秒数。
-    static func measure(_ scenario: Scenario, iconSize: CGFloat, scale: CGFloat, rounds: Int) -> Double {
+    /// - Parameter step: 相邻两次绘制之间时间前进多少秒。默认按 60 帧 / 秒；量睡着的脸时按它自己的刷新间隔，
+    ///   这样取到的正好是应用里屏幕上会出现的那些画面。
+    static func measure(
+        _ scenario: Scenario, iconSize: CGFloat, scale: CGFloat, rounds: Int, step: TimeInterval = 1.0 / 60
+    ) -> Double {
         let renderer = FaceRenderer()
         // 画布留得足够大（四周各一个图标），不同表情用同一块画布。
         let canvasSize = CGSize(width: iconSize * 3, height: iconSize * 3)
@@ -58,11 +62,11 @@ enum FaceBench {
         let rect = CGRect(x: iconSize, y: iconSize, width: iconSize, height: iconSize)
         // 先画几次热身（第一次会建立颜色等缓存）。
         for round in 0..<20 {
-            renderer.draw(scenario.state(round), in: rect, context: canvas.context, time: Double(round) / 60)
+            renderer.draw(scenario.state(round), in: rect, context: canvas.context, time: Double(round) * step)
         }
         let started = DispatchTime.now().uptimeNanoseconds
         for round in 0..<rounds {
-            renderer.draw(scenario.state(round), in: rect, context: canvas.context, time: 100 + Double(round) / 60)
+            renderer.draw(scenario.state(round), in: rect, context: canvas.context, time: 100 + Double(round) * step)
         }
         let elapsed = DispatchTime.now().uptimeNanoseconds - started
         return Double(elapsed) / Double(rounds) / 1_000_000
@@ -87,6 +91,51 @@ enum FaceBench {
             let width = scenario.name.unicodeScalars.reduce(0) { $0 + ($1.value > 0x2E80 ? 2 : 1) }
             let padding = String(repeating: " ", count: max(0, 28 - width))
             print("[FacesDemo]   \(scenario.name)\(padding) \(cells.joined(separator: "  "))")
+        }
+    }
+
+    // MARK: - 睡着的脸：每秒开销
+
+    /// 睡着的几档。应用里睡着的图标困意会稳定在 1（情绪模块的设定），50% 只出现在入睡、醒来的那一两秒里。
+    static let sleepLevels: [(name: String, sleepiness: Double)] = [("打瞌睡 50%", 0.5), ("打瞌睡 100%（睡熟）", 1.0)]
+
+    /// 一张睡着的脸每秒的开销 = 每秒重画几次（由 animationInterval 决定）× 每次画多久。
+    struct SleepCost {
+        let name: String
+        /// 每秒重画几次。
+        let redrawsPerSecond: Double
+        /// 每次绘制的毫秒数：64 点 @2x、64 点 @1x、128 点 @2x、32 点 @2x。
+        let perDraw: [Double]
+        /// 每张脸每秒耗多少毫秒，顺序同上。
+        var perSecond: [Double] { perDraw.map { $0 * redrawsPerSecond } }
+    }
+
+    static let sizes: [(size: CGFloat, scale: CGFloat)] = [(64, 2), (64, 1), (128, 2), (32, 2)]
+
+    /// 量睡着的几档：按它自己的刷新间隔连续画（时间每次前进一个间隔），覆盖完整的循环。
+    static func measureSleep(rounds: Int) -> [SleepCost] {
+        let renderer = FaceRenderer()
+        return sleepLevels.map { level in
+            let state = ExpressionPreset.dozing.state(seed: seed, intensity: level.sleepiness)
+            let interval = renderer.animationInterval(for: state)
+            // 返回 0 表示每帧重画，按 60 帧 / 秒算；nil 表示不重画。
+            let perSecond = interval.map { $0 > 0 ? 1 / $0 : 60 } ?? 0
+            let step = interval.map { $0 > 0 ? $0 : 1.0 / 60 } ?? 1.0 / 60
+            let scenario = Scenario(name: level.name) { _ in state }
+            let perDraw = sizes.map { measure(scenario, iconSize: $0.size, scale: $0.scale, rounds: rounds, step: step) }
+            return SleepCost(name: level.name, redrawsPerSecond: perSecond, perDraw: perDraw)
+        }
+    }
+
+    static func printSleepTable(rounds: Int) {
+        print("[FacesDemo] 睡着的脸 · 每张脸每秒的开销 = 每秒重画次数 × 每次的绘制耗时（毫秒）")
+        print("[FacesDemo]   情形                  每秒重画   每次：64点@2x   64点@1x  128点@2x   32点@2x  │  每秒：64点@2x   64点@1x  128点@2x   32点@2x")
+        for cost in measureSleep(rounds: rounds) {
+            let width = cost.name.unicodeScalars.reduce(0) { $0 + ($1.value > 0x2E80 ? 2 : 1) }
+            let padding = String(repeating: " ", count: max(0, 22 - width))
+            let draws = cost.perDraw.map { String(format: "%8.3f", $0) }.joined(separator: "  ")
+            let seconds = cost.perSecond.map { String(format: "%8.3f", $0) }.joined(separator: "  ")
+            print(String(format: "[FacesDemo]   %@%@ %6.1f 次      %@  │      %@", cost.name, padding, cost.redrawsPerSecond, draws, seconds))
         }
     }
 }

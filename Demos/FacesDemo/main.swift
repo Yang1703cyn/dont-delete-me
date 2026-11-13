@@ -4,7 +4,8 @@
 //   swift run FacesDemo --play              试玩窗口：眼睛跟着鼠标动，可以切换表情和强度、播放连续演示；关窗即退出
 //   swift run FacesDemo --play --seconds 5  同上，5 秒后自己退出（加 --autoplay 则一打开就播放连续演示）
 //   swift run FacesDemo --play --selfcheck  打开试玩窗口自检一遍（约 15 秒）：在进程内触发每个按钮、滑杆的动作并播放连续演示
-//   swift run FacesDemo --bench             绘制耗时表（要看真实数字请加 -c release）
+//   swift run FacesDemo --bench             绘制耗时表，以及睡着的脸每秒的开销（要看真实数字请加 -c release）
+//   swift run -c release FacesDemo --sleep-sheet  睡着的脸省电前后的逐帧对比：docs/样张/睡着-省电前后.png（见 SleepSheet.swift）
 //   swift run FacesDemo --sheets            生成 docs/样张/全表情.png 和 docs/样张/试玩窗口.png
 //   swift run FacesDemo --snapshot --at 6   不开窗口，把连续演示第 6 秒的窗口画面存成 docs/样张/试玩窗口.png
 //   swift run FacesDemo --style-proposal    重新生成第一阶段的风格提案样张（三种待选风格的画法在 Proposal/ 里）
@@ -47,6 +48,14 @@ do {
         }
     case "--bench":
         FaceBench.printTable(rounds: Int(value(after: "--rounds") ?? 3000))
+        FaceBench.printSleepTable(rounds: Int(value(after: "--rounds") ?? 3000))
+    case "--sleep-strip":
+        // 用当前的绘制代码出一条睡着的脸的逐帧样张：docs/样张/睡着-<名字>-逐帧.png。
+        let name = arguments.count > 1 && !arguments[1].hasPrefix("--") ? arguments[1] : "现在"
+        report([try SleepSheet.writeStrip(name: name, period: value(after: "--period") ?? SleepSheet.breathPeriod)])
+    case "--sleep-sheet":
+        // 把 睡着-省电前-逐帧.png 和当前代码现画的逐帧拼成 docs/样张/睡着-省电前后.png。
+        report([try SleepSheet.writeComparison()])
     case "--sheets":
         report(try ExpressionSheet.generate())
         report([try Playground.snapshot(scriptTime: 4.4)])
@@ -56,7 +65,7 @@ do {
     case "--style-proposal":
         report(try StyleProposal.generate())
     default:
-        print("用法：swift run FacesDemo [--play [--seconds N] [--autoplay] [--selfcheck] | --bench | --sheets | --snapshot [--at 秒] | --style-proposal]")
+        print("用法：swift run FacesDemo [--play [--seconds N] [--autoplay] [--selfcheck] | --bench | --sheets | --snapshot [--at 秒] | --sleep-strip 名字 [--period 秒] | --sleep-sheet | --style-proposal]")
         exit(2)
     }
 } catch {

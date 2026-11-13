@@ -457,23 +457,13 @@ struct FacePainter {
             }
         }
 
-        // Zzz：三个由小到大的"Z"，从头的右上方飘出去，边飘边长大，到顶缩小、淡出。用折线画，不是文字。
-        if pose.sleepDepth > 0 {
-            let rect = pose.rect
-            for i in 0..<3 {
-                let progress = CGFloat(FaceMath.fract(pose.time / 2.6 + Double(i) / 3 + pose.look.phase))
-                let visible = FaceMath.smoothstep(0, 0.15, progress) * (1 - FaceMath.smoothstep(0.8, 1, progress))
-                let half = FaceMath.lerp(0.028, 0.062, progress) * rect.width * pose.sleepDepth * visible
-                // 太小的 Z 认不出来：小到一定程度就淡掉。
-                let alpha = FaceMath.smoothstep(0.5 * u, 1.8 * u, half)
-                guard alpha > 0.01 else { continue }
-                let center = CGPoint(
-                    x: rect.midX + FaceMath.lerp(0.22, 0.38, progress) * rect.width
-                        + sin(progress * 2 * .pi * 1.5) * 0.015 * rect.width,
-                    y: rect.minY + FaceMath.lerp(0.22, -0.10, progress) * rect.height
-                )
+        // Zzz（位置和大小见 FacePose.zzzLetters）：用折线画，不是文字。睡熟时不透明，和别的墨线在同一条路径里一次画完。
+        if !pose.zzz.isEmpty {
+            let path = lines(alpha: pose.zzzAlpha)
+            for letter in pose.zzz {
+                let center = letter.center
+                let half = letter.half
                 // 略向右倾的 Z。
-                let path = lines(alpha: alpha)
                 path.move(to: CGPoint(x: center.x - half * 0.8, y: center.y - half))
                 path.addLine(to: CGPoint(x: center.x + half, y: center.y - half))
                 path.addLine(to: CGPoint(x: center.x - half, y: center.y + half))
@@ -506,6 +496,10 @@ struct FacePainter {
     private func paintOpenMouth(_ mouth: MouthShape) {
         let s = pose.s
         guard mouth.open > MouthShape.openThreshold * s else { return }
+        if mouth.isSnoreOnly {
+            paintSnoreMouth(mouth)
+            return
+        }
         let steps = 14
         let path = CGMutablePath()
         path.move(to: mouth.upperPoint(0, of: steps))
@@ -541,6 +535,29 @@ struct FacePainter {
         context.setStrokeColor(FaceStyle.ink)
         context.setLineWidth(pose.inkLine)
         context.strokePath()
+    }
+
+    /// 睡熟时的小圆嘴：三个椭圆叠起来——白边、墨线、嘴里。
+    /// 和一般的嘴（描两次边、填一次）画出来几乎一样（一般的嘴在纯粹睡着时本来就近似一个椭圆：
+    /// 上缘比嘴角高 curve、下缘比上缘低 open），但只要三次填充，不用描边——描边比填充贵得多。
+    /// 睡着的脸每秒要重画好几次，这一项是它最大的一块开销。
+    private func paintSnoreMouth(_ mouth: MouthShape) {
+        let rx = mouth.width / 2
+        let ry = mouth.open / 2
+        // 一般的嘴：上缘中点在 center.y + curve（curve 为负，往上），下缘中点再往下 open。
+        let center = CGPoint(x: mouth.center.x, y: mouth.center.y + mouth.curve + ry)
+        func ellipse(grow: CGFloat) -> CGRect {
+            CGRect(x: center.x - rx - grow, y: center.y - ry - grow, width: (rx + grow) * 2, height: (ry + grow) * 2)
+        }
+        let line = pose.inkLine
+        context.setFillColor(FaceStyle.white)
+        context.fillEllipse(in: ellipse(grow: line / 2 + pose.halo))
+        context.setFillColor(FaceStyle.ink)
+        context.fillEllipse(in: ellipse(grow: line / 2))
+        if rx > line / 2, ry > line / 2 {
+            context.setFillColor(FaceStyle.mouthInside)
+            context.fillEllipse(in: ellipse(grow: -line / 2))
+        }
     }
 
     // MARK: - 头晕的星星

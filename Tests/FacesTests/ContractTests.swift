@@ -80,7 +80,8 @@ struct ContractTests {
         // 只有汗：每秒 30 次；只是泪汪汪：每秒 20 次；睡着：每秒 10 次。
         #expect(renderer.animationInterval(for: FaceState(seed: 1, sweat: 0.5)) == 1.0 / 30)
         #expect(renderer.animationInterval(for: FaceState(seed: 1, tears: 0.3)) == 1.0 / 20)
-        #expect(renderer.animationInterval(for: Sample.dozing(1)) == 0.1)
+        #expect(renderer.animationInterval(for: Sample.dozing(1)) == 0.25)
+        #expect(renderer.animationInterval(for: Sample.dozing(0.5)) == 0.25)
         // 几种同时出现时取最紧的。
         #expect(renderer.animationInterval(for: FaceState(seed: 1, sweat: 0.5, sleepiness: 1)) == 1.0 / 30)
     }

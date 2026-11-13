@@ -7,6 +7,7 @@
 // 尺寸单位 u：图标短边 / 64，也就是"64 点图标上的 1 点"。下面的比例都按 u 给出。
 
 import CoreGraphics
+import Foundation
 
 enum FaceStyle {
     // MARK: 颜色（全部是 sRGB；叠加层的画布和窗口也都是 sRGB）
@@ -103,8 +104,34 @@ enum FaceStyle {
 
     /// 泪超过这个值才开始往下流（在此之前只是眼眶里泪汪汪）。流下来的泪会画到图标下方。
     static let tearStreamThreshold: CGFloat = 0.4
-    /// 困意超过这个值才冒 Zzz、开始缓慢起伏。Zzz 会画到图标上方。
+    /// 困意超过这个值开始缓慢起伏、画面开始定时重画，Zzz 的画布也从这里留出来（Zzz 会画到图标上方）。
+    /// Zzz 本身随困意长大、淡入，约 0.5 起才看得见（见 FacePose 的 zzzAlpha）。
     static let zzzThreshold: CGFloat = 0.35
+
+    // MARK: 睡着时的循环小动画（按每秒 4 帧设计）
+
+    /// 睡着时（困意超过 zzzThreshold）多久重画一次：每秒 4 帧。
+    /// 桌面上睡着的图标是常态，这一项决定了空闲时的耗电。起伏和 Zzz 的动作都按这个帧率设计：
+    /// 64 点图标上相邻两帧之间任何东西都只移动不到半个点，Z 的出现和消失靠大小变化，低帧率下也不显得卡。
+    static let sleepFrameInterval: TimeInterval = 0.25
+    /// 起伏一周的时长（秒）：每秒 4 帧时正好 16 帧。Zzz 也按这个周期循环，两者同步。
+    static let breathPeriod: TimeInterval = 4.0
+    /// 起伏的幅度（单位 u）：整张脸上下各移动这么多。
+    static let breathLift: CGFloat = 0.6
+    /// 每个 Z 停留多久（秒）：每秒 4 帧时是 12 帧。比"三个 Z 冒完"的间隔长一点，
+    /// 所以下一轮最下面的小 z 冒出来时，上一轮最上面的大 Z 还在——Zzz 是连成一串往上飘的，不会看上去"跳回原处"。
+    static let zzzLife: TimeInterval = 3.0
+    /// 三个 Z（由小到大、由下往上）：在一个起伏周期里第几秒冒出来，以及位置和大小。
+    /// 位置相对图标矩形：x 从中线往右、y 从上缘往下，单位 u；大小是 Z 的半宽（单位：五官单位 s）。
+    /// 每个 Z 在停留期间往右上飘 zzzDrift。数值保证加上线宽、白边之后仍在 zzzOutset 以内（测试会检查）。
+    static let zzzLetters: [(spawn: TimeInterval, x: CGFloat, y: CGFloat, half: CGFloat)] = [
+        (2.0, 13.0, 14.0, 2.0),
+        (2.75, 18.0, 4.5, 2.7),
+        (3.5, 23.0, -4.5, 3.5),
+    ]
+    /// 每个 Z 在停留期间飘多远（单位 u）：往右、往上。
+    static let zzzDriftX: CGFloat = 1.0
+    static let zzzDriftY: CGFloat = 2.4
 
     // MARK: 画到图标外面多远（单位 u）
 

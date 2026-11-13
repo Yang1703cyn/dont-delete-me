@@ -290,6 +290,26 @@ struct FramePipelineTests {
         #expect(awake.demand == .idle)
     }
 
+    @Test func 几张睡着的脸的重画时刻对齐到同一批_叠加层一次唤醒一起重画() {
+        // 对齐规则本身：严格晚于现在的下一个整数倍；正好在整数倍上时约下一个；间隔为 0 就是现在。
+        #expect(FramePipeline.nextRedraw(after: 3.7, every: 0.25) == 3.75)
+        #expect(FramePipeline.nextRedraw(after: 3.75, every: 0.25) == 4.0)
+        #expect(FramePipeline.nextRedraw(after: 3.7, every: 0) == 3.7)
+        #expect(FramePipeline.nextRedraw(after: 3.7, every: -1) == 3.7)
+
+        // 两个图标先后睡着（相差 0.1 秒），之后它们约的是同一个时刻。
+        let bench = Bench()
+        bench.pipeline.start()
+        let a = makeIcon(1, x: 100), b = makeIcon(2, x: 300)
+        bench.icons.report(IconUpdate(snapshot: makeSnapshot([a, b], revision: 1), isReset: true))
+        bench.director.stateFor = { icon in
+            FaceState(mood: icon.id == a.id ? .dozing : .calm, seed: icon.id.faceSeed, sleepiness: icon.id == a.id ? 1 : 0)
+        }
+        #expect(bench.frame(at: 1.0).demand == .by(1.125))
+        bench.director.stateFor = { FaceState(mood: .dozing, seed: $0.id.faceSeed, sleepiness: 1) }
+        #expect(bench.frame(at: 1.1).demand == .by(1.125))   // 后睡着的 b 也约 1.125，而不是 1.225
+    }
+
     @Test func 绘制回调把对应的表情交给表情绘制者() {
         let bench = Bench()
         bench.pipeline.start()
