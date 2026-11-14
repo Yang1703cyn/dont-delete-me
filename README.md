@@ -6,10 +6,8 @@
 
 > Every icon on your Mac desktop gets a face. They watch your cursor — and burst into tears when you drag them toward the Trash.
 
-<!-- 待核实：演示动图尚未录制（分镜见 docs/发布/动图分镜.md）。录好后把下面这行占位文字换成：
-     <p align="center"><img src="Assets/demo.en.gif" width="720" alt="Desktop icons with faces follow the cursor; one is dragged to the Trash and cries, the others cover their eyes, and a little ghost floats up."></p>
-     这一份用英文假文件录的那条；动图的存放路径也待定。 -->
-*Demo GIF goes here — it hasn't been recorded yet. **[TO VERIFY · 待核实]***
+<p align="center"><img src="Assets/demo.en.gif" width="720" alt="Desktop icons with faces follow the cursor; one is dragged to the Trash and cries, the others cover their eyes, and a little ghost floats up."></p>
+<p align="center"><sub>The faces and reactions in this clip are drawn by the app's own code; the desktop around them is a mock-up, not a screen recording.</sub></p>
 
 Don't Delete Me only *draws on top of* your desktop. It never changes, moves, renames, or deletes any of your files or icons. Open it and it works: no account, no settings, no network.
 
@@ -37,25 +35,30 @@ The whole interface is one menu bar icon — a pair of eyes — with two items: 
 
 **Requirements:** an Apple Silicon Mac — the prebuilt app does not run on Intel Macs. The app declares macOS 14 as its minimum, but so far it has only been run on macOS 27.0.1. Other versions are untested.
 
-1. Download the app from the [Releases page](../../releases/latest). **[TO VERIFY · 待核实]** — nothing has been published yet; the link and the file name will be filled in with the first release.
+1. Download `DontDeleteMe.zip` (about 1.3 MB) from the [Releases page](https://github.com/Yang1703cyn/dont-delete-me/releases/latest).
 2. Unzip it and put `DontDeleteMe.app` wherever you like. The Applications folder is a fine choice.
 3. Open it. The first time, macOS will refuse — see below.
 4. macOS asks whether Don't Delete Me may control Finder. Click **Allow**. ([Why it asks](#permissions-and-privacy).)
+
+   <img src="Assets/screenshots/first-launch-3-allow-finder.zh-CN.png" width="252" alt="macOS prompt (in Chinese): Don't Delete Me wants to control Finder, with the app's explanation and the buttons Don't Allow and Allow">
+
 5. Faces appear on your desktop icons, and a pair of eyes appears in the menu bar.
 
 ### "macOS won't let me open it"
 
 Don't Delete Me is not notarized by Apple: notarization requires a paid Apple developer account, and this project doesn't have one. macOS's built-in check rejects apps like that, so a downloaded copy is blocked the first time you open it.
 
-> **[TO VERIFY · 待核实]** The steps below are what we expect on recent macOS versions. They have not yet been tested with a copy downloaded from the internet, so the exact wording may differ. Screenshots will be added once they are confirmed.
->
-> 1. Double-click the app. macOS warns that it can't verify the app. Click **Done** — not "Move to Trash". (The icons would never forgive you.)
-> 2. Open **System Settings → Privacy & Security**, scroll down to the Security section, and click **Open Anyway** next to the message about Don't Delete Me.
-> 3. Confirm, and enter your password if asked. You only have to do this once.
->
-> <!-- 待核实：截图位置 1 —— 第一次双击时的系统拦截提示 -->
-> <!-- 待核实：截图位置 2 —— 系统设置 → 隐私与安全性里的「仍要打开」 -->
-> <!-- 待核实：截图位置 3 —— 「是否允许控制访达」的授权弹窗 -->
+These steps were tested on macOS 27.0.1 with a copy downloaded from the Releases page. The screenshots come from a Mac set to Chinese.
+
+1. Double-click the app. macOS says the app was not opened because Apple could not verify that it is free of malware. Click **Done** — not "Move to Trash". (The icons would never forgive you.)
+
+   <img src="Assets/screenshots/first-launch-1-blocked.zh-CN.png" width="252" alt="macOS dialog (in Chinese) saying the app was not opened, with the buttons Done and Move to Trash">
+
+2. Open **System Settings → Privacy & Security** and scroll down to the **Security** section. A line there says Don't Delete Me was blocked to protect your Mac. Click **Open Anyway** next to it.
+
+   <img src="Assets/screenshots/first-launch-2-open-anyway.zh-CN.png" width="475" alt="The Security section of System Settings (in Chinese): Don't Delete Me was blocked to protect your Mac, with an Open Anyway button">
+
+3. Confirm once more, then enter your password or use Touch ID. You only have to do this once. Next comes step 4 above: allowing it to control Finder.
 
 Prefer not to deal with that at all? [Build it from source](#build-from-source) — an app you compile yourself opens without the warning.
 
@@ -71,7 +74,7 @@ Don't Delete Me finds out where your desktop icons are by asking Finder. macOS g
 
 What it asks Finder for: each desktop icon's position, name, kind, and modification date, plus desktop view settings such as the icon size. Every request is a *read*. The app contains no request that moves, renames, or deletes anything.
 
-If you decline, the app simply draws nothing. You can change your mind in **System Settings → Privacy & Security → Automation**, and the faces should show up by themselves shortly after. **[TO VERIFY · 待核实]** — declining and recovering is covered by automated tests but has not been tried by hand yet.
+If you decline, the app simply draws nothing. You can change your mind in **System Settings → Privacy & Security → Automation**: find Don't Delete Me and turn on **Finder** underneath it. The faces appear within a second or so — no need to reopen the app.
 
 ### What it does not ask for
 
